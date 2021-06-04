@@ -1,0 +1,3 @@
+seisbench
+pytorch-lightning~=1.3.4
+torch

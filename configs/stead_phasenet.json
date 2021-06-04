@@ -1,0 +1,8 @@
+{
+  "model": "PhaseNet",
+  "data": "STEAD",
+  "trainer_args": {
+    "gpus": 1,
+    "max_epochs": 100
+  }
+}
