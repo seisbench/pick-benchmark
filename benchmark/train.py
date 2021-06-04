@@ -55,8 +55,8 @@ def prepare_data(config, model, test_run):
         dev_mask[:500] = True
         dev_data.filter(dev_mask, inplace=True)
 
-    train_data.preload_waveforms()
-    dev_data.preload_waveforms()
+    train_data.preload_waveforms(pbar=True)
+    dev_data.preload_waveforms(pbar=True)
 
     train_generator = sbg.GenericGenerator(train_data)
     dev_generator = sbg.GenericGenerator(dev_data)
