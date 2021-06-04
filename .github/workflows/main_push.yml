@@ -1,0 +1,20 @@
+# This workflow runs on every push to main. It does the following:
+#   1. Checks if black formatting is followed.
+#   2. Runs all tests.
+
+name: main_push_action
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  black_action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Black Style Check
+        run: |
+          pip install git+git://github.com/psf/black@20.8b1
+          python -m black . --check
