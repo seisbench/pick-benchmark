@@ -9,6 +9,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 import torch
 import os
+import logging
 
 import data
 import models
@@ -62,6 +63,14 @@ def prepare_data(config, model, test_run):
     dataset = data.get_dataset_by_name(config["data"])(
         sampling_rate=100, component_order="ZNE", dimension_order="NCW", cache="full"
     )
+
+    if "split" not in dataset.metadata.columns:
+        logging.warning("No split defined, adding auxiliary split.")
+        split = np.array(["train"] * len(dataset))
+        split[int(0.6 * len(dataset)) : int(0.7 * len(dataset))] = "dev"
+        split[int(0.7 * len(dataset)) :] = "test"
+
+        dataset._metadata["split"] = split
 
     train_data = dataset.train()
     dev_data = dataset.dev()
