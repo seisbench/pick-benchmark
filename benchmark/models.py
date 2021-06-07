@@ -3,6 +3,7 @@ import seisbench.generate as sbg
 
 import pytorch_lightning as pl
 import torch
+import numpy as np
 from abc import abstractmethod, ABC
 
 
@@ -103,6 +104,7 @@ class PhaseNetLit(pl.LightningModule):
                 windowlen=3001,
                 strategy="pad",
             ),
+            sbg.ChangeDtype(np.float32),
             sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
             sbg.ProbabilisticLabeller(
                 label_columns=phase_dict, sigma=self.sigma, dim=0
