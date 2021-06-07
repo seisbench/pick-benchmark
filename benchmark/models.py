@@ -6,6 +6,22 @@ import torch
 from abc import abstractmethod, ABC
 
 
+# Phase dict for labelling. We only study P and S phases without differentiating between them.
+phase_dict = {
+    "trace_p_arrival_sample": "P",
+    "trace_P1_arrival_sample": "P",
+    "trace_Pg_arrival_sample": "P",
+    "trace_Pn_arrival_sample": "P",
+    "trace_PmP_arrival_sample": "P",
+    "trace_s_arrival_sample": "S",
+    "trace_S_arrival_sample": "S",
+    "trace_S1_arrival_sample": "S",
+    "trace_Sg_arrival_sample": "S",
+    "trace_SmS_arrival_sample": "S",
+    "trace_Sn_arrival_sample": "S",
+}
+
+
 class SeisBenchModuleLit(pl.LightningModule, ABC):
     """
     Abstract interface for SeisBench lightning modules.
@@ -23,9 +39,20 @@ class SeisBenchModuleLit(pl.LightningModule, ABC):
 
 
 class PhaseNetLit(pl.LightningModule):
-    def __init__(self, lr=1e-2, **kwargs):
+    """
+    LightningModule for PhaseNet
+
+    :param lr: Learning rate, defaults to 1e-2
+    :param sigma: Standard deviation passed to the ProbabilisticPickLabeller
+    :param sample_boundaries: Low and high boundaries for the RandomWindow selection.
+    :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
+    """
+
+    def __init__(self, lr=1e-2, sigma=10, sample_boundaries=(None, None), **kwargs):
         super().__init__()
         self.lr = lr
+        self.sigma = sigma
+        self.sample_boundaries = sample_boundaries
         self.model = sbm.PhaseNet(**kwargs)
 
     def forward(self, x):
@@ -69,9 +96,15 @@ class PhaseNetLit(pl.LightningModule):
         return optimizer
 
     def get_augmentations(self):
-        pick_labels = ["trace_p_arrival_sample", "trace_s_arrival_sample"]
         return [
-            sbg.RandomWindow(windowlen=3001, strategy="pad"),
+            sbg.RandomWindow(
+                low=self.sample_boundaries[0],
+                high=self.sample_boundaries[1],
+                windowlen=3001,
+                strategy="pad",
+            ),
             sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
-            sbg.ProbabilisticLabeller(label_columns=pick_labels, sigma=10, dim=0),
+            sbg.ProbabilisticLabeller(
+                label_columns=phase_dict, sigma=self.sigma, dim=0
+            ),
         ]
