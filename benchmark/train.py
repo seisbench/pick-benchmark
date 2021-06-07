@@ -1,16 +1,18 @@
 import seisbench.generate as sbg
 
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger
 import argparse
 import json
 import numpy as np
 from torch.utils.data import DataLoader
+import os
 
 import data
 import models
 
 
-def train(config, test_run):
+def train(config, experiment_name, test_run):
     """
     Runs the model training defined by the config.
 
@@ -23,7 +25,18 @@ def train(config, test_run):
 
     train_loader, dev_loader = prepare_data(config, model, test_run)
 
-    trainer = pl.Trainer(**config.get("trainer_args", {}))
+    default_root_dir = os.path.join("weights", experiment_name)
+    if not test_run:
+        logger = TensorBoardLogger("tb_logs", experiment_name)
+        logger.log_hyperparams(config)
+    else:
+        logger = False
+
+    trainer = pl.Trainer(
+        default_root_dir=default_root_dir,
+        logger=logger,
+        **config.get("trainer_args", {})
+    )
 
     trainer.fit(model, train_loader, dev_loader)
 
@@ -83,4 +96,5 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = json.load(f)
 
-    train(config, test_run=args.test_run)
+    experiment_name = os.path.basename(args.config)[:-5]
+    train(config, experiment_name, test_run=args.test_run)
