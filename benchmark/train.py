@@ -1,4 +1,5 @@
 import seisbench.generate as sbg
+from seisbench.util import worker_seeding
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
@@ -6,6 +7,7 @@ import argparse
 import json
 import numpy as np
 from torch.utils.data import DataLoader
+import torch
 import os
 
 import data
@@ -84,16 +86,24 @@ def prepare_data(config, model, test_run):
     dev_generator.add_augmentations(model.get_augmentations())
 
     train_loader = DataLoader(
-        train_generator, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_generator,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        worker_init_fn=worker_seeding,
     )
     dev_loader = DataLoader(
-        dev_generator, batch_size=batch_size, num_workers=num_workers
+        dev_generator,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        worker_init_fn=worker_seeding,
     )
 
     return train_loader, dev_loader
 
 
 if __name__ == "__main__":
+    torch.manual_seed(42)
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--test_run", action="store_true")
