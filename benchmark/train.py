@@ -1,7 +1,7 @@
 import seisbench.generate as sbg
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 import argparse
 import json
 import numpy as np
@@ -25,16 +25,22 @@ def train(config, experiment_name, test_run):
 
     train_loader, dev_loader = prepare_data(config, model, test_run)
 
-    default_root_dir = os.path.join("weights", experiment_name)
+    # CSV logger - also used for saving configuration as yaml
+    csv_logger = CSVLogger("weights", experiment_name)
+    csv_logger.log_hyperparams(config)
+    loggers = [csv_logger]
+
+    default_root_dir = os.path.join(
+        "weights"
+    )  # Experiment name is parsed from the loggers
     if not test_run:
-        logger = TensorBoardLogger("tb_logs", experiment_name)
-        logger.log_hyperparams(config)
-    else:
-        logger = False
+        tb_logger = TensorBoardLogger("tb_logs", experiment_name)
+        tb_logger.log_hyperparams(config)
+        loggers += [tb_logger]
 
     trainer = pl.Trainer(
         default_root_dir=default_root_dir,
-        logger=logger,
+        logger=loggers,
         **config.get("trainer_args", {})
     )
 
