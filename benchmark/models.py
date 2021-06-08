@@ -142,11 +142,12 @@ class GPDLit(pl.LightningModule):
     :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
     """
 
-    def __init__(self, lr=1e-3, **kwargs):
+    def __init__(self, lr=1e-3, highpass=None, **kwargs):
         super().__init__()
         self.lr = lr
         self.model = sbm.GPD(**kwargs)
         self.loss = torch.nn.NLLLoss()
+        self.highpass = highpass
 
     def forward(self, x):
         return self.model(x)
@@ -172,30 +173,37 @@ class GPDLit(pl.LightningModule):
         return optimizer
 
     def get_augmentations(self):
-        return [
-            # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
-            # Uses strategy variable, as padding will be handled by the random window.
-            # In 1/3 of the cases, just returns the original trace, to keep diversity high.
-            sbg.OneOf(
-                [
-                    sbg.WindowAroundSample(
-                        list(phase_dict.keys()),
-                        samples_before=400,
-                        windowlen=800,
-                        selection="random",
-                        strategy="variable",
-                    ),
-                    sbg.NullAugmentation(),
-                ],
-                probabilities=[2, 1],
-            ),
-            sbg.RandomWindow(
-                windowlen=400,
-                strategy="pad",
-            ),
-            sbg.ChangeDtype(np.float32),
-            sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
-            sbg.StandardLabeller(
-                label_columns=phase_dict, on_overlap="fixed-relevance"
-            ),
-        ]
+        filter = []
+        if self.highpass is not None:
+            filter = [sbg.Filter(1, self.highpass, "highpass")]
+
+        return (
+            [
+                # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
+                # Uses strategy variable, as padding will be handled by the random window.
+                # In 1/3 of the cases, just returns the original trace, to keep diversity high.
+                sbg.OneOf(
+                    [
+                        sbg.WindowAroundSample(
+                            list(phase_dict.keys()),
+                            samples_before=400,
+                            windowlen=800,
+                            selection="random",
+                            strategy="variable",
+                        ),
+                        sbg.NullAugmentation(),
+                    ],
+                    probabilities=[2, 1],
+                ),
+                sbg.RandomWindow(
+                    windowlen=400,
+                    strategy="pad",
+                ),
+                sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+                sbg.StandardLabeller(
+                    label_columns=phase_dict, on_overlap="fixed-relevance"
+                ),
+            ]
+            + filter
+            + [sbg.ChangeDtype(np.float32)]
+        )

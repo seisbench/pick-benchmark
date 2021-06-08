@@ -6,6 +6,7 @@
     "max_epochs": 100
   },
   "model_args": {
-    "lr": 1e-4
+    "lr": 1e-4,
+    "highpass": 0.5
   }
 }
