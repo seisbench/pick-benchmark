@@ -10,10 +10,14 @@ from abc import abstractmethod, ABC
 # Phase dict for labelling. We only study P and S phases without differentiating between them.
 phase_dict = {
     "trace_p_arrival_sample": "P",
+    "trace_pP_arrival_sample": "P",
+    "trace_P_arrival_sample": "P",
     "trace_P1_arrival_sample": "P",
     "trace_Pg_arrival_sample": "P",
     "trace_Pn_arrival_sample": "P",
     "trace_PmP_arrival_sample": "P",
+    "trace_pwP_arrival_sample": "P",
+    "trace_pwPm_arrival_sample": "P",
     "trace_s_arrival_sample": "S",
     "trace_S_arrival_sample": "S",
     "trace_S1_arrival_sample": "S",
@@ -98,6 +102,22 @@ class PhaseNetLit(pl.LightningModule):
 
     def get_augmentations(self):
         return [
+            # In 80 % of the cases, select windows around picks, to reduce amount of noise traces in training.
+            # Uses strategy variable, as padding will be handled by the random window.
+            # In 20 % of the cases, just returns the original trace, to keep diversity high.
+            sbg.OneOf(
+                [
+                    sbg.WindowAroundSample(
+                        list(phase_dict.keys()),
+                        samples_before=3000,
+                        windowlen=6000,
+                        selection="random",
+                        strategy="variable",
+                    ),
+                    sbg.NullAugmentation(),
+                ],
+                probabilities=[4, 1],
+            ),
             sbg.RandomWindow(
                 low=self.sample_boundaries[0],
                 high=self.sample_boundaries[1],
