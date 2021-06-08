@@ -157,7 +157,7 @@ class GPDLit(pl.LightningModule):
     def shared_step(self, batch):
         x = batch["X"]
         y_true = batch["y"].squeeze()
-        y_pred = self.model(x)
+        y_pred = torch.log(self.model(x))
         return self.loss(y_pred, y_true)
 
     def training_step(self, batch, batch_idx):
