@@ -55,6 +55,7 @@ class PhaseNetLit(pl.LightningModule):
 
     def __init__(self, lr=1e-2, sigma=10, sample_boundaries=(None, None), **kwargs):
         super().__init__()
+        self.save_hyperparameters()
         self.lr = lr
         self.sigma = sigma
         self.sample_boundaries = sample_boundaries
@@ -144,6 +145,7 @@ class GPDLit(pl.LightningModule):
 
     def __init__(self, lr=1e-3, highpass=None, **kwargs):
         super().__init__()
+        self.save_hyperparameters()
         self.lr = lr
         self.model = sbm.GPD(**kwargs)
         self.loss = torch.nn.NLLLoss()
