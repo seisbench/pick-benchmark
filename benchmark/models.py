@@ -130,3 +130,72 @@ class PhaseNetLit(pl.LightningModule):
                 label_columns=phase_dict, sigma=self.sigma, dim=0
             ),
         ]
+
+
+class GPDLit(pl.LightningModule):
+    """
+    LightningModule for PhaseNet
+
+    :param lr: Learning rate, defaults to 1e-2
+    :param sigma: Standard deviation passed to the ProbabilisticPickLabeller
+    :param sample_boundaries: Low and high boundaries for the RandomWindow selection.
+    :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
+    """
+
+    def __init__(self, lr=1e-3, **kwargs):
+        super().__init__()
+        self.lr = lr
+        self.model = sbm.GPD(**kwargs)
+        self.loss = torch.nn.NLLLoss()
+
+    def forward(self, x):
+        return self.model(x)
+
+    def shared_step(self, batch):
+        x = batch["X"]
+        y_true = batch["y"].squeeze()
+        y_pred = self.model(x)
+        return self.loss(y_pred, y_true)
+
+    def training_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("val_loss", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optimizer
+
+    def get_augmentations(self):
+        return [
+            # In 80 % of the cases, select windows around picks, to reduce amount of noise traces in training.
+            # Uses strategy variable, as padding will be handled by the random window.
+            # In 20 % of the cases, just returns the original trace, to keep diversity high.
+            sbg.OneOf(
+                [
+                    sbg.WindowAroundSample(
+                        list(phase_dict.keys()),
+                        samples_before=400,
+                        windowlen=800,
+                        selection="random",
+                        strategy="variable",
+                    ),
+                    sbg.NullAugmentation(),
+                ],
+                probabilities=[4, 1],
+            ),
+            sbg.RandomWindow(
+                windowlen=400,
+                strategy="pad",
+            ),
+            sbg.ChangeDtype(np.float32),
+            sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+            sbg.StandardLabeller(
+                label_columns=phase_dict, on_overlap="fixed-relevance"
+            ),
+        ]
