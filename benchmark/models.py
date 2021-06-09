@@ -203,7 +203,10 @@ class GPDLit(pl.LightningModule):
                 ),
                 sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
                 sbg.StandardLabeller(
-                    label_columns=phase_dict, on_overlap="fixed-relevance"
+                    label_columns=phase_dict,
+                    on_overlap="fixed-relevance",
+                    low=100,
+                    high=-100,
                 ),
             ]
             + filter
