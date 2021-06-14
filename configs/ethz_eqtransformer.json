@@ -1,0 +1,12 @@
+{
+  "model": "EQTransformer",
+  "data": "ETHZ",
+  "trainer_args": {
+    "gpus": 1,
+    "max_epochs": 100
+  },
+  "model_args": {
+    "sigma": 50,
+    "lr": 1e-3
+  }
+}
