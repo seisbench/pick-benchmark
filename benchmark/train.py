@@ -122,4 +122,6 @@ if __name__ == "__main__":
         config = json.load(f)
 
     experiment_name = os.path.basename(args.config)[:-5]
+    if args.test_run:
+        experiment_name = experiment_name + "_test"
     train(config, experiment_name, test_run=args.test_run)
