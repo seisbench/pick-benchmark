@@ -91,8 +91,8 @@ def prepare_data(config, model, test_run):
     train_generator = sbg.GenericGenerator(train_data)
     dev_generator = sbg.GenericGenerator(dev_data)
 
-    train_generator.add_augmentations(model.get_augmentations())
-    dev_generator.add_augmentations(model.get_augmentations())
+    train_generator.add_augmentations(model.get_train_augmentations())
+    dev_generator.add_augmentations(model.get_val_augmentations())
 
     train_loader = DataLoader(
         train_generator,
