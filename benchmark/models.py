@@ -70,7 +70,7 @@ class SeisBenchModuleLit(pl.LightningModule, ABC):
         return self.get_augmentations()
 
 
-class PhaseNetLit(pl.LightningModule):
+class PhaseNetLit(SeisBenchModuleLit):
     """
     LightningModule for PhaseNet
 
@@ -144,7 +144,7 @@ class PhaseNetLit(pl.LightningModule):
         ]
 
 
-class GPDLit(pl.LightningModule):
+class GPDLit(SeisBenchModuleLit):
     """
     LightningModule for PhaseNet
 
@@ -225,14 +225,14 @@ class GPDLit(pl.LightningModule):
         )
 
 
-class EQTransformerLit(pl.LightningModule):
+class EQTransformerLit(SeisBenchModuleLit):
     """
-    LightningModule for PhaseNet
+    LightningModule for EQTransformer
 
     :param lr: Learning rate, defaults to 1e-2
     :param sigma: Standard deviation passed to the ProbabilisticPickLabeller
     :param sample_boundaries: Low and high boundaries for the RandomWindow selection.
-    :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
+    :param kwargs: Kwargs are passed to the SeisBench.models.EQTransformer constructor.
     """
 
     def __init__(
@@ -370,3 +370,93 @@ class EQTransformerLit(pl.LightningModule):
 
     def get_augmentations(self):
         raise NotImplementedError("Use get_train/val_augmentations instead.")
+
+
+class CREDLit(SeisBenchModuleLit):
+    """
+    LightningModule for CRED
+
+    :param lr: Learning rate, defaults to 1e-2
+    :param sample_boundaries: Low and high boundaries for the RandomWindow selection.
+    :param kwargs: Kwargs are passed to the SeisBench.models.CRED constructor.
+    """
+
+    def __init__(self, lr=1e-2, sample_boundaries=(None, None), **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.lr = lr
+        self.sample_boundaries = sample_boundaries
+        self.loss = torch.nn.BCELoss()
+        self.model = sbm.CRED(**kwargs)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def shared_step(self, batch):
+        x = batch["spec"]
+        y_true = batch["y"][:, 0]
+        y_pred = self.model(x)[:, :, 0]
+
+        return self.loss(y_pred, y_true)
+
+    def training_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("val_loss", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optimizer
+
+    def get_augmentations(self):
+        p_phases = [key for key, val in phase_dict.items() if val == "P"]
+        s_phases = [key for key, val in phase_dict.items() if val == "S"]
+
+        def spectrogram(state_dict):
+            x, metadata = state_dict["X"]
+            spec = self.model.waveforms_to_spectrogram(x)
+            state_dict["spec"] = (spec, metadata)
+
+        def resample_detections(state_dict):
+            # Resample detections to 19 samples as in the output of CRED
+            y, metadata = state_dict["y"]
+            state_dict["y"] = (y[:, ::158], metadata)
+
+        augmentations = [
+            # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
+            # Uses strategy variable, as padding will be handled by the random window.
+            # In 1/3 of the cases, just returns the original trace, to keep diversity high.
+            sbg.OneOf(
+                [
+                    sbg.WindowAroundSample(
+                        list(phase_dict.keys()),
+                        samples_before=3000,
+                        windowlen=6000,
+                        selection="random",
+                        strategy="variable",
+                    ),
+                    sbg.NullAugmentation(),
+                ],
+                probabilities=[2, 1],
+            ),
+            sbg.RandomWindow(
+                low=self.sample_boundaries[0],
+                high=self.sample_boundaries[1],
+                windowlen=3000,
+                strategy="pad",
+            ),
+            sbg.DetectionLabeller(p_phases, s_phases),
+            # Normalize to ensure correct augmentation behavior
+            sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+            spectrogram,
+            resample_detections,
+            sbg.ChangeDtype(np.float32, "y"),
+            sbg.ChangeDtype(np.float32, "spec"),
+        ]
+
+        return augmentations
