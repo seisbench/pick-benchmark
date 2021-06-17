@@ -424,8 +424,12 @@ class CREDLit(SeisBenchModuleLit):
 
         def resample_detections(state_dict):
             # Resample detections to 19 samples as in the output of CRED
+            # Each sample represents the average over 158 original samples
             y, metadata = state_dict["y"]
-            state_dict["y"] = (y[:, ::158], metadata)
+            y = np.pad(y, [(0, 0), (0, 2)], mode="constant", constant_values=0)
+            y = np.reshape(y, (1, 19, 158))
+            y = np.mean(y, axis=-1)
+            state_dict["y"] = (y, metadata)
 
         augmentations = [
             # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
