@@ -133,3 +133,11 @@ dmypy.json
 
 # Pycharm settings
 .idea/
+
+# Model weights and training logs
+weights/
+tb_logs/
+# Model weights and training logs
+weights/
+tb_logs/
+
