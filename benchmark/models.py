@@ -232,6 +232,9 @@ class EQTransformerLit(SeisBenchModuleLit):
     :param lr: Learning rate, defaults to 1e-2
     :param sigma: Standard deviation passed to the ProbabilisticPickLabeller
     :param sample_boundaries: Low and high boundaries for the RandomWindow selection.
+    :param loss_weights: Loss weights for detection, P and S phase.
+    :param rotate_array: If true, rotate array along sample axis.
+    :param detection_fixed_window: Passed as parameter fixed_window to detection
     :param kwargs: Kwargs are passed to the SeisBench.models.EQTransformer constructor.
     """
 
@@ -242,6 +245,7 @@ class EQTransformerLit(SeisBenchModuleLit):
         sample_boundaries=(None, None),
         loss_weights=(0.05, 0.40, 0.55),
         rotate_array=False,
+        detection_fixed_window=None,
         **kwargs
     ):
         super().__init__()
@@ -252,6 +256,7 @@ class EQTransformerLit(SeisBenchModuleLit):
         self.loss = torch.nn.BCELoss()
         self.loss_weights = loss_weights
         self.rotate_array = rotate_array
+        self.detection_fixed_window = detection_fixed_window
         self.model = sbm.EQTransformer(**kwargs)
 
     def forward(self, x):
@@ -288,6 +293,17 @@ class EQTransformerLit(SeisBenchModuleLit):
         p_phases = [key for key, val in phase_dict.items() if val == "P"]
         s_phases = [key for key, val in phase_dict.items() if val == "S"]
 
+        if self.detection_fixed_window is not None:
+            detection_labeller = sbg.DetectionLabeller(
+                p_phases,
+                fixed_window=self.detection_fixed_window,
+                key=("X", "detections"),
+            )
+        else:
+            detection_labeller = sbg.DetectionLabeller(
+                p_phases, s_phases=s_phases, key=("X", "detections")
+            )
+
         block1 = [
             # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
             # Uses strategy variable, as padding will be handled by the random window.
@@ -314,7 +330,7 @@ class EQTransformerLit(SeisBenchModuleLit):
             sbg.ProbabilisticLabeller(
                 label_columns=phase_dict, sigma=self.sigma, dim=0
             ),
-            sbg.DetectionLabeller(p_phases, s_phases, key=("X", "detections")),
+            detection_labeller,
             # Normalize to ensure correct augmentation behavior
             sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
         ]
