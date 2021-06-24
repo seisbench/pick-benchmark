@@ -3,6 +3,7 @@ import seisbench.generate as sbg
 
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 import numpy as np
 from abc import abstractmethod, ABC
 
@@ -227,6 +228,7 @@ class GPDLit(SeisBenchModuleLit):
         self.model = sbm.GPD(**kwargs)
         self.loss = torch.nn.NLLLoss()
         self.highpass = highpass
+        self.predict_stride = 5
 
     def forward(self, x):
         return self.model(x)
@@ -291,10 +293,49 @@ class GPDLit(SeisBenchModuleLit):
         )
 
     def get_eval_augmentations(self):
-        raise NotImplementedError()
+        return [
+            # Larger window length ensures a sliding window covering full trace can be applied
+            sbg.SteeredWindow(windowlen=3400, strategy="pad"),
+            sbg.SlidingWindow(timestep=self.predict_stride, windowlen=400),
+            sbg.ChangeDtype(np.float32),
+            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+        ]
 
     def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
-        raise NotImplementedError()
+        x = batch["X"]
+        window_borders = batch["window_borders"]
+
+        shape_save = x.shape
+        x = x.reshape(
+            (-1,) + shape_save[2:]
+        )  # Merge batch and sliding window dimensions
+        pred = self.model(x)
+        pred = pred.reshape(shape_save[:2] + (-1,))
+        pred = torch.repeat_interleave(
+            pred, self.predict_stride, dim=1
+        )  # Counteract stride
+        pred = F.pad(pred, (0, 0, 200, 200))
+        pred = pred.permute(0, 2, 1)
+
+        score_detection = torch.zeros(pred.shape[0])
+        score_p_or_s = torch.zeros(pred.shape[0])
+        p_sample = torch.zeros(pred.shape[0], dtype=int)
+        s_sample = torch.zeros(pred.shape[0], dtype=int)
+
+        for i in range(pred.shape[0]):
+            start_sample, end_sample = window_borders[i]
+            local_pred = pred[i, :, start_sample:end_sample]
+
+            score_detection[i] = torch.max(1 - local_pred[-1])  # 1 - noise
+            score_p_or_s[i] = torch.max(local_pred[0]) / torch.max(
+                local_pred[1]
+            )  # most likely P by most likely S
+
+            # Adjust for prediction stride by choosing the sample in the middle of each block
+            p_sample[i] = torch.argmax(local_pred[0]) + self.predict_stride // 2
+            s_sample[i] = torch.argmax(local_pred[1]) + self.predict_stride // 2
+
+        return score_detection, score_p_or_s, p_sample, s_sample
 
 
 class EQTransformerLit(SeisBenchModuleLit):

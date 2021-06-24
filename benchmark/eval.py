@@ -140,7 +140,7 @@ if __name__ == "__main__":
         default="dev,test",
         help="Sets on which to evaluate, separated by commata. Defaults to dev and test.",
     )
-    parser.add_argument("--batchsize", default=1024, help="Batch size")
+    parser.add_argument("--batchsize", type=int, default=1024, help="Batch size")
     parser.add_argument(
         "--num_workers", default=12, help="Number of workers for data loader"
     )
