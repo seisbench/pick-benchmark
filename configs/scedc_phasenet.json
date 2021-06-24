@@ -1,0 +1,14 @@
+{
+  "model": "PhaseNet",
+  "data": "SCEDC",
+  "batch_size": 256,
+  "trainer_args": {
+    "gpus": 1,
+    "max_epochs": 100
+  },
+  "model_args": {
+    "sigma": 50,
+    "sample_boundaries": [null, null],
+    "lr": 1e-3
+  }
+}
