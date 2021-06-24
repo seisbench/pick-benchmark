@@ -6,7 +6,7 @@
     "max_epochs": 100
   },
   "model_args": {
-    "sigma": 50,
+    "sigma": 20,
     "lr": 1e-3
   }
 }

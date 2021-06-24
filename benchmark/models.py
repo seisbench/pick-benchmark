@@ -720,8 +720,8 @@ class BasicPhaseAELit(SeisBenchModuleLit):
                 [
                     sbg.WindowAroundSample(
                         list(phase_dict.keys()),
-                        samples_before=600,
-                        windowlen=600,
+                        samples_before=700,
+                        windowlen=700,
                         selection="random",
                         strategy="variable",
                     ),
