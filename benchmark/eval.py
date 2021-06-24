@@ -23,7 +23,7 @@ def main(weights, targets, sets, batchsize, num_workers):
     config_path = version / "hparams.yaml"
     with open(config_path, "r") as f:
         # config = yaml.safe_load(f)
-        config = yaml.load(f)
+        config = yaml.full_load(f)
 
     model_cls = models.__getattribute__(config["model"] + "Lit")
     model = load_best_model(model_cls, weights, version.name)
