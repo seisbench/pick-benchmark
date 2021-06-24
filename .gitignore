@@ -140,4 +140,6 @@ tb_logs/
 # Model weights and training logs
 weights/
 tb_logs/
+pred/
+lightning_logs/
 
