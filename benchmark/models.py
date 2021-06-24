@@ -293,12 +293,17 @@ class GPDLit(SeisBenchModuleLit):
         )
 
     def get_eval_augmentations(self):
+        filter = []
+        if self.highpass is not None:
+            filter = [sbg.Filter(1, self.highpass, "highpass")]
+
         return [
             # Larger window length ensures a sliding window covering full trace can be applied
             sbg.SteeredWindow(windowlen=3400, strategy="pad"),
             sbg.SlidingWindow(timestep=self.predict_stride, windowlen=400),
+            sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+            *filter,
             sbg.ChangeDtype(np.float32),
-            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
         ]
 
     def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
