@@ -634,10 +634,39 @@ class CREDLit(SeisBenchModuleLit):
         return augmentations
 
     def get_eval_augmentations(self):
-        raise NotImplementedError()
+        def spectrogram(state_dict):
+            x, metadata = state_dict["X"]
+            spec = self.model.waveforms_to_spectrogram(x)
+            state_dict["spec"] = (spec, metadata)
+
+        return [
+            sbg.SteeredWindow(windowlen=3000, strategy="pad"),
+            sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+            spectrogram,
+            sbg.ChangeDtype(np.float32),
+        ]
 
     def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
-        raise NotImplementedError()
+        x = batch["spec"]
+        window_borders = batch["window_borders"]
+
+        pred = self.model(x)
+
+        score_detection = torch.zeros(pred.shape[0])
+        score_p_or_s = torch.zeros(pred.shape[0]) * np.nan
+        p_sample = torch.zeros(pred.shape[0], dtype=int) * np.nan
+        s_sample = torch.zeros(pred.shape[0], dtype=int) * np.nan
+
+        for i in range(pred.shape[0]):
+            start_sample, end_sample = window_borders[i]
+            # We go for a slightly broader window, i.e., all output prediction points encompassing the target window
+            start_resampled = start_sample // 158
+            end_resampled = end_sample // 158 + 1
+            local_pred = pred[i, start_resampled:end_resampled, 0]
+
+            score_detection[i] = torch.max(local_pred)  # 1 - noise
+
+        return score_detection, score_p_or_s, p_sample, s_sample
 
 
 class BasicPhaseAELit(SeisBenchModuleLit):
@@ -714,7 +743,41 @@ class BasicPhaseAELit(SeisBenchModuleLit):
         ]
 
     def get_eval_augmentations(self):
-        raise NotImplementedError()
+        return [
+            sbg.SteeredWindow(windowlen=3000, strategy="pad"),
+            sbg.ChangeDtype(np.float32),
+            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+        ]
 
     def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
-        raise NotImplementedError()
+        x = batch["X"]
+        window_borders = batch["window_borders"]
+
+        x = x.reshape(x.shape[:-1] + (5, 600))  # Split into 5 windows of length 600
+        x = x.permute(0, 2, 1, 3)  # --> (batch, windows, channels, samples)
+        shape_save = x.shape
+        x = x.reshape(-1, 3, 600)  # --> (batch * windows, channels, samples)
+        pred = self.model(x)
+        pred = pred.reshape(
+            shape_save[:2] + (3, 600)
+        )  # --> (batch, window, channels, samples)
+        pred = torch.cat([pred[:, i] for i in range(5)], dim=-1)
+
+        score_detection = torch.zeros(pred.shape[0])
+        score_p_or_s = torch.zeros(pred.shape[0])
+        p_sample = torch.zeros(pred.shape[0], dtype=int)
+        s_sample = torch.zeros(pred.shape[0], dtype=int)
+
+        for i in range(pred.shape[0]):
+            start_sample, end_sample = window_borders[i]
+            local_pred = pred[i, :, start_sample:end_sample]
+
+            score_detection[i] = torch.max(1 - local_pred[-1])  # 1 - noise
+            score_p_or_s[i] = torch.max(local_pred[0]) / torch.max(
+                local_pred[1]
+            )  # most likely P by most likely S
+
+            p_sample[i] = torch.argmax(local_pred[0])
+            s_sample[i] = torch.argmax(local_pred[1])
+
+        return score_detection, score_p_or_s, p_sample, s_sample
