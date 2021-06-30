@@ -1,0 +1,13 @@
+{
+  "model": "PhaseNet",
+  "data": "LenDB",
+  "trainer_args": {
+    "gpus": 1,
+    "max_epochs": 100
+  },
+  "model_args": {
+    "sigma": 50,
+    "sample_boundaries": [-1500, 4500],
+    "lr": 1e-3
+  }
+}
