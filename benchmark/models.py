@@ -115,7 +115,7 @@ class PhaseNetLit(SeisBenchModuleLit):
     :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
     """
 
-    def __init__(self, lr=1e-2, sigma=10, sample_boundaries=(None, None), **kwargs):
+    def __init__(self, lr=1e-2, sigma=20, sample_boundaries=(None, None), **kwargs):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
@@ -359,7 +359,7 @@ class EQTransformerLit(SeisBenchModuleLit):
     def __init__(
         self,
         lr=1e-2,
-        sigma=10,
+        sigma=20,
         sample_boundaries=(None, None),
         loss_weights=(0.05, 0.40, 0.55),
         rotate_array=False,
@@ -549,11 +549,18 @@ class CREDLit(SeisBenchModuleLit):
     :param kwargs: Kwargs are passed to the SeisBench.models.CRED constructor.
     """
 
-    def __init__(self, lr=1e-2, sample_boundaries=(None, None), **kwargs):
+    def __init__(
+        self,
+        lr=1e-2,
+        sample_boundaries=(None, None),
+        detection_fixed_window=None,
+        **kwargs
+    ):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
         self.sample_boundaries = sample_boundaries
+        self.detection_fixed_window = detection_fixed_window
         self.loss = torch.nn.BCELoss()
         self.model = sbm.CRED(**kwargs)
 
@@ -599,6 +606,13 @@ class CREDLit(SeisBenchModuleLit):
             y = np.mean(y, axis=-1)
             state_dict["y"] = (y, metadata)
 
+        if self.detection_fixed_window is not None:
+            detection_labeller = sbg.DetectionLabeller(
+                p_phases, fixed_window=self.detection_fixed_window
+            )
+        else:
+            detection_labeller = sbg.DetectionLabeller(p_phases, s_phases=s_phases)
+
         augmentations = [
             # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
             # Uses strategy variable, as padding will be handled by the random window.
@@ -622,7 +636,7 @@ class CREDLit(SeisBenchModuleLit):
                 windowlen=3000,
                 strategy="pad",
             ),
-            sbg.DetectionLabeller(p_phases, s_phases),
+            detection_labeller,
             # Normalize to ensure correct augmentation behavior
             sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
             spectrogram,
@@ -679,7 +693,7 @@ class BasicPhaseAELit(SeisBenchModuleLit):
     :param kwargs: Kwargs are passed to the SeisBench.models.BasicPhaseAE constructor.
     """
 
-    def __init__(self, lr=1e-2, sigma=10, sample_boundaries=(None, None), **kwargs):
+    def __init__(self, lr=1e-2, sigma=20, sample_boundaries=(None, None), **kwargs):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
