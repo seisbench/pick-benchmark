@@ -149,9 +149,9 @@ class PhaseNetLit(SeisBenchModuleLit):
 
     def get_augmentations(self):
         return [
-            # In 80 % of the cases, select windows around picks, to reduce amount of noise traces in training.
+            # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
             # Uses strategy variable, as padding will be handled by the random window.
-            # In 20 % of the cases, just returns the original trace, to keep diversity high.
+            # In 1/3 of the cases, just returns the original trace, to keep diversity high.
             sbg.OneOf(
                 [
                     sbg.WindowAroundSample(
@@ -163,7 +163,7 @@ class PhaseNetLit(SeisBenchModuleLit):
                     ),
                     sbg.NullAugmentation(),
                 ],
-                probabilities=[4, 1],
+                probabilities=[2, 1],
             ),
             sbg.RandomWindow(
                 low=self.sample_boundaries[0],
