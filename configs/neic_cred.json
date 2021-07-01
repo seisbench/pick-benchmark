@@ -1,12 +1,12 @@
 {
   "model": "CRED",
-  "data": "STEAD",
+  "data": "NEIC",
   "trainer_args": {
     "gpus": 1,
     "max_epochs": 100
   },
   "model_args": {
-    "sample_boundaries": [-1500, null],
-    "lr": 1e-3
+    "lr": 1e-3,
+    "detection_fixed_window": 2000
   }
 }

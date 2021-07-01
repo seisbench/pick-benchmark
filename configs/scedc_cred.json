@@ -1,12 +1,11 @@
 {
-  "model": "PhaseNet",
-  "data": "LenDB",
+  "model": "CRED",
+  "data": "SCEDC",
   "trainer_args": {
     "gpus": 1,
     "max_epochs": 100
   },
   "model_args": {
-    "sample_boundaries": [-1500, 4500],
     "lr": 1e-3
   }
 }

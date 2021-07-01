@@ -1,0 +1,13 @@
+{
+  "model": "CRED",
+  "data": "LenDB",
+  "trainer_args": {
+    "gpus": 1,
+    "max_epochs": 100
+  },
+  "model_args": {
+    "lr": 1e-3,
+    "detection_fixed_window": 2000,
+    "sample_boundaries": [-1500, 4500]
+  }
+}

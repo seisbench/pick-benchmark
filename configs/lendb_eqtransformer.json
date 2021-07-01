@@ -1,12 +1,13 @@
 {
-  "model": "PhaseNet",
+  "model": "EQTransformer",
   "data": "LenDB",
   "trainer_args": {
     "gpus": 1,
     "max_epochs": 100
   },
   "model_args": {
-    "sample_boundaries": [-1500, 4500],
-    "lr": 1e-3
+    "lr": 1e-3,
+    "detection_fixed_window": 2000,
+    "rotate_array": true
   }
 }

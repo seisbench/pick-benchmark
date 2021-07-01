@@ -1,6 +1,6 @@
 {
   "model": "EQTransformer",
-  "data": "STEAD",
+  "data": "InstanceCountsCombined",
   "trainer_args": {
     "gpus": 1,
     "max_epochs": 100

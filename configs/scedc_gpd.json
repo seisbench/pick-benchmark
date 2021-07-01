@@ -1,12 +1,12 @@
 {
-  "model": "EQTransformer",
-  "data": "STEAD",
+  "model": "GPD",
+  "data": "SCEDC",
   "trainer_args": {
     "gpus": 1,
     "max_epochs": 100
   },
   "model_args": {
     "lr": 1e-3,
-    "rotate_array": true
+    "highpass": 0.5
   }
 }

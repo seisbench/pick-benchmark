@@ -6,7 +6,6 @@
     "max_epochs": 100
   },
   "model_args": {
-    "sigma": 50,
     "lr": 1e-3,
     "rotate_array": true,
     "detection_fixed_window": 2000

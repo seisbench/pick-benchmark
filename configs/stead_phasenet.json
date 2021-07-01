@@ -6,8 +6,7 @@
     "max_epochs": 100
   },
   "model_args": {
-    "sigma": 50,
-    "sample_boundaries": [-1000, null],
+    "sample_boundaries": [-1500, null],
     "lr": 1e-3
   }
 }
