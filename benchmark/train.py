@@ -14,6 +14,16 @@ import logging
 import data
 import models
 
+default_workers = os.getenv("BENCHMARK_DEFAULT_WORKERS", None)
+if default_workers is None:
+    logging.warning(
+        "BENCHMARK_DEFAULT_WORKERS not set. "
+        "Will use 12 workers if not specified otherwise in configuration."
+    )
+    default_workers = 12
+else:
+    default_workers = int(default_workers)
+
 
 def train(config, experiment_name, test_run):
     """
@@ -59,7 +69,7 @@ def prepare_data(config, model, test_run):
     :return:
     """
     batch_size = config.get("batch_size", 1024)
-    num_workers = config.get("num_workers", 12)
+    num_workers = config.get("num_workers", default_workers)
     dataset = data.get_dataset_by_name(config["data"])(
         sampling_rate=100, component_order="ZNE", dimension_order="NCW", cache="full"
     )
