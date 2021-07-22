@@ -110,6 +110,7 @@ def prepare_data(config, model, test_run):
         shuffle=True,
         num_workers=num_workers,
         worker_init_fn=worker_seeding,
+        drop_last=True,  # Avoid crashes from batch norm layers for batch size 1
     )
     dev_loader = DataLoader(
         dev_generator,
