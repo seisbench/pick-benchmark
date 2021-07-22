@@ -657,7 +657,7 @@ class CREDLit(SeisBenchModuleLit):
             sbg.SteeredWindow(windowlen=3000, strategy="pad"),
             sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
             spectrogram,
-            sbg.ChangeDtype(np.float32),
+            sbg.ChangeDtype(np.float32, "spec"),
         ]
 
     def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
