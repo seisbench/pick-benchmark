@@ -114,9 +114,12 @@ def eval_task23(version_dir: Path):
     test_pred = pd.read_csv(version_dir / "test_task23.csv")
     test_pred["phase_label_bin"] = test_pred["phase_label"] == "P"
 
-    if np.isnan(dev_pred["score_p_or_s"]).any():
+    if np.isnan(dev_pred["score_p_or_s"]).all():
         logging.warning(f"{version_dir} contains NaN predictions for tasks 2 and 3")
         return {}
+
+    dev_pred = dev_pred[~np.isnan(dev_pred["score_p_or_s"])]
+    test_pred = test_pred[~np.isnan(test_pred["score_p_or_s"])]
 
     prec, recall, thr = precision_recall_curve(
         dev_pred["phase_label_bin"], dev_pred["score_p_or_s"]
