@@ -44,7 +44,12 @@ def vector_cross_entropy(y_pred, y_true, eps=1e-5):
     :return: Average loss across batch
     """
     h = y_true * torch.log(y_pred + eps)
-    h = h.mean(-1).sum(-1)  # Mean along sample dimension and sum along pick dimension
+    if y_pred.ndim == 3:
+        h = h.mean(-1).sum(
+            -1
+        )  # Mean along sample dimension and sum along pick dimension
+    else:
+        h = h.sum(-1)  # Sum along pick dimension
     h = h.mean()  # Mean over batch axis
     return -h
 
