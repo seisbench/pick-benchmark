@@ -213,22 +213,32 @@ class PhaseNetLit(SeisBenchModuleLit):
 
 class GPDLit(SeisBenchModuleLit):
     """
-    LightningModule for PhaseNet
+    LightningModule for GPD
 
-    :param lr: Learning rate, defaults to 1e-2
-    :param sigma: Standard deviation passed to the ProbabilisticPickLabeller
-    :param sample_boundaries: Low and high boundaries for the RandomWindow selection.
-    :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
+    :param lr: Learning rate, defaults to 1e-3
+    :param sigma: Standard deviation passed to the ProbabilisticPickLabeller. If not, uses determinisic labels,
+                  i.e., whether a pick is contained.
+    :param highpass: If not None, cutoff frequency for highpass filter in Hz.
+    :param kwargs: Kwargs are passed to the SeisBench.models.GPD constructor.
     """
 
-    def __init__(self, lr=1e-3, highpass=None, **kwargs):
+    def __init__(self, lr=1e-3, highpass=None, sigma=None, **kwargs):
         super().__init__()
         self.save_hyperparameters()
         self.lr = lr
+        self.sigma = sigma
         self.model = sbm.GPD(**kwargs)
-        self.loss = torch.nn.NLLLoss()
+        if sigma is None:
+            self.nllloss = torch.nn.NLLLoss()
+            self.loss = self.nll_with_probabilities
+        else:
+            self.loss = vector_cross_entropy
         self.highpass = highpass
         self.predict_stride = 5
+
+    def nll_with_probabilities(self, y_pred, y_true):
+        y_pred = torch.log(y_pred)
+        return self.nllloss(y_pred, y_true)
 
     def forward(self, x):
         return self.model(x)
@@ -236,7 +246,7 @@ class GPDLit(SeisBenchModuleLit):
     def shared_step(self, batch):
         x = batch["X"]
         y_true = batch["y"].squeeze()
-        y_pred = torch.log(self.model(x))
+        y_pred = self.model(x)
         return self.loss(y_pred, y_true)
 
     def training_step(self, batch, batch_idx):
@@ -257,6 +267,18 @@ class GPDLit(SeisBenchModuleLit):
         filter = []
         if self.highpass is not None:
             filter = [sbg.Filter(1, self.highpass, "highpass")]
+
+        if self.sigma is None:
+            labeller = sbg.StandardLabeller(
+                label_columns=phase_dict,
+                on_overlap="fixed-relevance",
+                low=100,
+                high=-100,
+            )
+        else:
+            labeller = sbg.ProbabilisticPointLabeller(
+                label_columns=phase_dict, position=0.5, sigma=self.sigma
+            )
 
         return (
             [
@@ -281,12 +303,7 @@ class GPDLit(SeisBenchModuleLit):
                     strategy="pad",
                 ),
                 sbg.Normalize(detrend_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
-                sbg.StandardLabeller(
-                    label_columns=phase_dict,
-                    on_overlap="fixed-relevance",
-                    low=100,
-                    high=-100,
-                ),
+                labeller,
             ]
             + filter
             + [sbg.ChangeDtype(np.float32)]
