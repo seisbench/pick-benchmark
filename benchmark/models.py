@@ -767,15 +767,28 @@ class BasicPhaseAELit(SeisBenchModuleLit):
         x = batch["X"]
         window_borders = batch["window_borders"]
 
-        x = x.reshape(x.shape[:-1] + (5, 600))  # Split into 5 windows of length 600
+        # Create overlapping windows
+        re = torch.zeros(x.shape[:2] + (7, 600), dtype=x.dtype, device=x.device)
+        for i, start in enumerate(range(0, 2401, 400)):
+            re[:, :, i] = x[:, :, start : start + 600]
+        x = re
+
         x = x.permute(0, 2, 1, 3)  # --> (batch, windows, channels, samples)
         shape_save = x.shape
         x = x.reshape(-1, 3, 600)  # --> (batch * windows, channels, samples)
-        pred = self.model(x)
-        pred = pred.reshape(
+        window_pred = self.model(x)
+        window_pred = window_pred.reshape(
             shape_save[:2] + (3, 600)
         )  # --> (batch, window, channels, samples)
-        pred = torch.cat([pred[:, i] for i in range(5)], dim=-1)
+
+        # Connect predictions again, ignoring first and last second of each prediction
+        pred = torch.zeros((window_pred.shape[0], window_pred.shape[2], 3000))
+        for i, start in enumerate(range(0, 2401, 400)):
+            if start == 0:
+                # Use full window (for start==0, the end will be overwritten)
+                pred[:, :, start : start + 600] = window_pred[:, i]
+            else:
+                pred[:, :, start + 100 : start + 600] = window_pred[:, i, :, 100:]
 
         score_detection = torch.zeros(pred.shape[0])
         score_p_or_s = torch.zeros(pred.shape[0])
