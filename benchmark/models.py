@@ -344,6 +344,10 @@ class GPDLit(SeisBenchModuleLit):
         pred = F.pad(pred, (0, 0, 200, 200))
         pred = pred.permute(0, 2, 1)
 
+        # Otherwise windows shorter 30 s will automatically produce detections
+        pred[:, 2, :200] = 1
+        pred[:, 2, -200:] = 1
+
         score_detection = torch.zeros(pred.shape[0])
         score_p_or_s = torch.zeros(pred.shape[0])
         p_sample = torch.zeros(pred.shape[0], dtype=int)
