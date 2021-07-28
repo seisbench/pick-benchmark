@@ -54,7 +54,7 @@ def train(config, experiment_name, test_run):
     trainer = pl.Trainer(
         default_root_dir=default_root_dir,
         logger=loggers,
-        **config.get("trainer_args", {})
+        **config.get("trainer_args", {}),
     )
 
     trainer.fit(model, train_loader, dev_loader)
@@ -127,12 +127,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--test_run", action="store_true")
+    parser.add_argument("--lr", default=None, type=float)
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         config = json.load(f)
 
     experiment_name = os.path.basename(args.config)[:-5]
+    if args.lr is not None:
+        logging.warning(f"Overwriting learning rate to {args.lr}")
+        experiment_name += f"_{args.lr}"
+        config["model_args"]["lr"] = args.lr
+
     if args.test_run:
         experiment_name = experiment_name + "_test"
     train(config, experiment_name, test_run=args.test_run)
