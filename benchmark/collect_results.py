@@ -161,6 +161,7 @@ def eval_task23(version_dir: Path):
 
             stats[f"{set_str}_{phase}_mean_s"] = np.mean(diff)
             stats[f"{set_str}_{phase}_std_s"] = np.std(diff)
+            stats[f"{set_str}_{phase}_mae_s"] = np.mean(np.abs(diff))
 
     return stats
 
