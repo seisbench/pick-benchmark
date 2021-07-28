@@ -42,9 +42,21 @@ def process_version(version_dir: Path):
     """
 
     exp_name = version_dir.parent.name
-    data, model = exp_name.split("_")
+    parts = exp_name.split("_")
+    if len(parts) == 3:
+        data, model, lr = parts
+    else:
+        data, model = parts
+        lr = "0.001"
+    lr = float(lr)
     version = version_dir.name.split("_")[-1]
-    stats = {"experiment": exp_name, "data": data, "model": model, "version": version}
+    stats = {
+        "experiment": exp_name,
+        "data": data,
+        "model": model,
+        "lr": lr,
+        "version": version,
+    }
 
     stats.update(eval_task1(version_dir))
     stats.update(eval_task23(version_dir))
