@@ -29,7 +29,7 @@ def traverse_path(path, output):
             results.append(process_version(version_dir))
 
     results = pd.DataFrame(results)
-    results.sort_values(["data", "model"], inplace=True)
+    results.sort_values(["data", "model", "lr", "version"], inplace=True)
     results.to_csv(output, index=False)
 
 
@@ -146,7 +146,7 @@ def eval_task23(version_dir: Path):
         "dev_phase_precision": prec[opt_index],
         "dev_phase_recall": recall[opt_index],
         "dev_phase_f1": f1[opt_index],
-        "det_threshold": opt_thr,
+        "phase_threshold": opt_thr,
     }
     stats.update(dev_stats)
 
