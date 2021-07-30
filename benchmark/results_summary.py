@@ -54,7 +54,7 @@ def model_results(results_cross, model):
         f.write(table)
 
     table = results_to_table(
-        results_model,
+        results_model[results_model["data"] != "lendb"],
         ["test_P_mean_s", "test_P_std_s", "test_P_mae_s"],
         "dev_P_std_s",
         ["$\\mu$", "$\\sigma$", "MAE"],
@@ -79,7 +79,7 @@ def model_results(results_cross, model):
 
     fig = residual_matrix(
         "P",
-        results_model,
+        results_model[results_model["data"] != "lendb"],
         [Path("pred"), Path("pred_cross")],
         "dev_P_std_s",
         axis=("data", "target"),
