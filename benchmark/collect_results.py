@@ -4,52 +4,76 @@ import logging
 import pandas as pd
 import numpy as np
 from sklearn.metrics import precision_recall_curve, precision_recall_fscore_support
+from tqdm import tqdm
 
 
-def traverse_path(path, output):
+def traverse_path(path, output, cross=False):
     """
     Traverses the given path and extracts results for each experiment and version
 
     :param path: Root path
     :param output: Path to write results csv to
+    :param cross: If true, expects cross-domain results.
     :return: None
     """
     path = Path(path)
 
     results = []
 
-    for exp_dir in path.iterdir():
-        if not exp_dir.is_dir():
-            pass
-
+    exp_dirs = [x for x in path.iterdir() if x.is_dir()]
+    for exp_dir in tqdm(exp_dirs):
         for version_dir in exp_dir.iterdir():
             if not version_dir.is_dir():
                 pass
 
-            results.append(process_version(version_dir))
+            results.append(process_version(version_dir, cross=cross))
 
     results = pd.DataFrame(results)
-    results.sort_values(["data", "model", "lr", "version"], inplace=True)
+    if cross:
+        sort_keys = ["data", "model", "target", "lr", "version"]
+    else:
+        sort_keys = ["data", "model", "lr", "version"]
+    results.sort_values(sort_keys, inplace=True)
     results.to_csv(output, index=False)
 
 
-def process_version(version_dir: Path):
+def process_version(version_dir: Path, cross: bool):
     """
     Extracts statistics for the given version of the given experiment.
 
     :param version_dir: Path to the specific version
+    :param cross: If true, expects cross-domain results.
     :return: Results dictionary
     """
+    stats = parse_exp_name(version_dir, cross=cross)
 
+    stats.update(eval_task1(version_dir))
+    stats.update(eval_task23(version_dir))
+
+    return stats
+
+
+def parse_exp_name(version_dir, cross):
     exp_name = version_dir.parent.name
-    parts = exp_name.split("_")
-    if len(parts) == 3:
-        data, model, lr = parts
-    else:
-        data, model = parts
-        lr = "0.001"
-    lr = float(lr)
     version = version_dir.name.split("_")[-1]
+
+    parts = exp_name.split("_")
+    target = None
+    if cross:
+        if len(parts) == 4:
+            data, model, lr, target = parts
+        else:
+            data, model, target = parts
+            lr = "0.001"
+    else:
+        if len(parts) == 3:
+            data, model, lr = parts
+        else:
+            data, model = parts
+            lr = "0.001"
+
+    lr = float(lr)
+
     stats = {
         "experiment": exp_name,
         "data": data,
@@ -58,8 +82,8 @@ def process_version(version_dir: Path):
         "version": version,
     }
 
-    stats.update(eval_task1(version_dir))
-    stats.update(eval_task23(version_dir))
+    if cross:
+        stats["target"] = target
 
     return stats
 
@@ -132,6 +156,9 @@ def eval_task23(version_dir: Path):
 
     dev_pred = dev_pred[~np.isnan(dev_pred["score_p_or_s"])]
     test_pred = test_pred[~np.isnan(test_pred["score_p_or_s"])]
+    # Clipping removes infinitely likely P waves, usually resulting from models trained without S arrivals
+    dev_pred["score_p_or_s"] = np.clip(dev_pred["score_p_or_s"].values, -1e100, 1e100)
+    test_pred["score_p_or_s"] = np.clip(test_pred["score_p_or_s"].values, -1e100, 1e100)
 
     prec, recall, thr = precision_recall_curve(
         dev_pred["phase_label_bin"], dev_pred["score_p_or_s"]
@@ -192,7 +219,10 @@ if __name__ == "__main__":
         type=str,
         help="Path for the output csv",
     )
+    parser.add_argument(
+        "--cross", action="store_true", help="If true, expects cross-domain results."
+    )
 
     args = parser.parse_args()
 
-    traverse_path(args.path, args.output)
+    traverse_path(args.path, args.output, cross=args.cross)
