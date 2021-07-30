@@ -14,6 +14,17 @@ import data
 import logging
 
 
+data_aliases = {
+    "ethz": "ETHZ",
+    "geofon": "GEOFON",
+    "stead": "STEAD",
+    "neic": "NEIC",
+    "instance": "InstanceCountsCombined",
+    "lendb": "LenDB",
+    "scedc": "SCEDC",
+}
+
+
 def main(weights, targets, sets, batchsize, num_workers):
     weights = Path(weights)
     targets = Path(targets)
@@ -28,9 +39,22 @@ def main(weights, targets, sets, batchsize, num_workers):
     model_cls = models.__getattribute__(config["model"] + "Lit")
     model = load_best_model(model_cls, weights, version.name)
 
-    dataset = data.get_dataset_by_name(config["data"])(
+    data_name = data_aliases[targets.name]
+
+    if data_name != config["data"]:
+        logging.warning("Detected cross-domain evaluation")
+        pred_root = "pred_cross"
+        parts = weights.name.split()
+        weight_path_name = "_".join(parts[:2] + [targets.name] + parts[2:])
+
+    else:
+        pred_root = "pred"
+        weight_path_name = weights.name
+
+    dataset = data.get_dataset_by_name(data_name)(
         sampling_rate=100, component_order="ZNE", dimension_order="NCW", cache="full"
     )
+
     for eval_set in sets:
         split = dataset.get_split(eval_set)
         logging.warning(f"Starting set {eval_set}")
@@ -75,8 +99,8 @@ def main(weights, targets, sets, batchsize, num_workers):
 
             pred_path = (
                 weights.parent.parent
-                / "pred"
-                / weights.name
+                / pred_root
+                / weight_path_name
                 / version.name
                 / f"{eval_set}_task{task}.csv"
             )
