@@ -834,3 +834,108 @@ class BasicPhaseAELit(SeisBenchModuleLit):
             s_sample[i] = torch.argmax(local_pred[1])
 
         return score_detection, score_p_or_s, p_sample, s_sample
+
+
+class DPPDetectorLit(SeisBenchModuleLit):
+    """
+    LightningModule for DPPDetector
+
+    :param lr: Learning rate, defaults to 1e-2
+    :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
+    """
+
+    def __init__(self, lr=1e-3, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.lr = lr
+        self.nllloss = torch.nn.NLLLoss()
+        self.loss = self.nll_with_probabilities
+        self.model = sbm.DPPDetector(**kwargs)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def nll_with_probabilities(self, y_pred, y_true):
+        y_pred = torch.log(y_pred)
+        return self.nllloss(y_pred, y_true)
+
+    def shared_step(self, batch):
+        x = batch["X"]
+        y_true = batch["y"].squeeze()
+        y_pred = self.model(x)
+        return self.loss(y_pred, y_true)
+
+    def training_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("val_loss", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optimizer
+
+    def get_augmentations(self):
+        return [
+            # In 2/3 of the cases, select windows around picks, to reduce amount of noise traces in training.
+            # Uses strategy variable, as padding will be handled by the random window.
+            # In 1/3 of the cases, just returns the original trace, to keep diversity high.
+            sbg.OneOf(
+                [
+                    sbg.WindowAroundSample(
+                        list(phase_dict.keys()),
+                        samples_before=650,
+                        windowlen=1300,
+                        selection="random",
+                        strategy="variable",
+                    ),
+                    sbg.NullAugmentation(),
+                ],
+                probabilities=[2, 1],
+            ),
+            sbg.RandomWindow(
+                windowlen=500,
+                strategy="pad",
+            ),
+            sbg.ChangeDtype(np.float32),
+            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+            sbg.StandardLabeller(
+                label_columns=phase_dict, on_overlap="fixed-relevance"
+            ),
+        ]
+
+    def get_eval_augmentations(self):
+        return [
+            sbg.SteeredWindow(windowlen=3000, strategy="pad"),
+            sbg.ChangeDtype(np.float32),
+            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+        ]
+
+    def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
+        x = batch["X"]
+        window_borders = batch["window_borders"]
+
+        # Create windows
+        x = x.reshape(x.shape[:-1] + (6, 500))  # Split into 6 windows of length 500
+        x = x.permute(0, 2, 1, 3)  # --> (batch, windows, channels, samples)
+        shape_save = x.shape
+        x = x.reshape(-1, 3, 500)  # --> (batch * windows, channels, samples)
+        pred = self.model(x)
+        pred = pred.reshape(shape_save[:2] + (-1,))  # --> (batch, windows, label)
+
+        score_detection = torch.zeros(pred.shape[0])
+        score_p_or_s = torch.zeros(pred.shape[0])
+        for i in range(pred.shape[0]):
+            start_sample, end_sample = window_borders[i]
+            start_resampled = start_sample // 500
+            end_resampled = int(np.ceil(end_sample / 500))
+            local_pred = pred[i, start_resampled:end_resampled, :]
+
+            score_p_or_s[i] = torch.max(local_pred[:, 0]) / torch.max(local_pred[:, 1])
+            score_detection[i] = torch.max(1 - local_pred[:, -1])
+
+        return score_detection, score_p_or_s, np.nan, np.nan
