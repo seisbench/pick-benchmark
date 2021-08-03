@@ -3,6 +3,7 @@ from seisbench.util import worker_seeding
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
+from pytorch_lightning.callbacks import GPUStatsMonitor
 import argparse
 import json
 import numpy as np
@@ -51,9 +52,12 @@ def train(config, experiment_name, test_run):
         tb_logger.log_hyperparams(config)
         loggers += [tb_logger]
 
+    gpu_stats = GPUStatsMonitor()
+
     trainer = pl.Trainer(
         default_root_dir=default_root_dir,
         logger=loggers,
+        callbacks=[gpu_stats],
         **config.get("trainer_args", {}),
     )
 
