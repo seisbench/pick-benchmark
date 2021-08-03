@@ -77,6 +77,10 @@ def prepare_data(config, model, test_run):
     dataset = data.get_dataset_by_name(config["data"])(
         sampling_rate=100, component_order="ZNE", dimension_order="NCW", cache="full"
     )
+    restrict_to_phase = config.get("restrict_to_phase", None)
+    if restrict_to_phase is not None:
+        mask = generate_phase_mask(dataset, restrict_to_phase)
+        dataset.filter(mask, inplace=True)
 
     if "split" not in dataset.metadata.columns:
         logging.warning("No split defined, adding auxiliary split.")
@@ -124,6 +128,19 @@ def prepare_data(config, model, test_run):
     )
 
     return train_loader, dev_loader
+
+
+def generate_phase_mask(dataset, phases):
+    mask = np.zeros(len(dataset), dtype=bool)
+
+    for key, phase in models.phase_dict.items():
+        if phase not in phases:
+            continue
+        else:
+            if key in dataset.metadata:
+                mask = np.logical_or(mask, ~np.isnan(dataset.metadata[key]))
+
+    return mask
 
 
 if __name__ == "__main__":

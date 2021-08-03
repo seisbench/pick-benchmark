@@ -390,7 +390,7 @@ class EQTransformerLit(SeisBenchModuleLit):
         loss_weights=(0.05, 0.40, 0.55),
         rotate_array=False,
         detection_fixed_window=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -580,7 +580,7 @@ class CREDLit(SeisBenchModuleLit):
         lr=1e-2,
         sample_boundaries=(None, None),
         detection_fixed_window=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -929,13 +929,130 @@ class DPPDetectorLit(SeisBenchModuleLit):
 
         score_detection = torch.zeros(pred.shape[0])
         score_p_or_s = torch.zeros(pred.shape[0])
+        p_sample = torch.zeros(pred.shape[0], dtype=int) * np.nan
+        s_sample = torch.zeros(pred.shape[0], dtype=int) * np.nan
+
         for i in range(pred.shape[0]):
             start_sample, end_sample = window_borders[i]
-            start_resampled = start_sample // 500
-            end_resampled = int(np.ceil(end_sample / 500))
+            start_resampled = start_sample.cpu() // 500
+            end_resampled = int(np.ceil(end_sample.cpu() / 500))
             local_pred = pred[i, start_resampled:end_resampled, :]
 
             score_p_or_s[i] = torch.max(local_pred[:, 0]) / torch.max(local_pred[:, 1])
             score_detection[i] = torch.max(1 - local_pred[:, -1])
 
-        return score_detection, score_p_or_s, np.nan, np.nan
+        return score_detection, score_p_or_s, p_sample, s_sample
+
+
+class DPPPickerLit(SeisBenchModuleLit):
+    """
+    LightningModule for DPPPicker
+
+    :param lr: Learning rate, defaults to 1e-2
+    :param kwargs: Kwargs are passed to the SeisBench.models.PhaseNet constructor.
+    """
+
+    def __init__(self, mode, lr=1e-3, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.mode = mode
+        self.lr = lr
+        self.loss = torch.nn.BCELoss()
+        self.model = sbm.DPPPicker(mode=mode, **kwargs)
+
+    def forward(self, x):
+        if self.mode == "P":
+            x = x[:, 0:1]  # Select vertical component
+        elif self.mode == "S":
+            x = x[:, 1:3]  # Select horizontal components
+        else:
+            raise ValueError(f"Unknown mode {self.mode}")
+
+        return self.model(x)
+
+    def shared_step(self, batch):
+        x = batch["X"]
+        y_true = batch["y"]
+
+        if self.mode == "P":
+            y_true = y_true[:, 0]  # P wave
+            x = x[:, 0:1]  # Select vertical component
+        elif self.mode == "S":
+            y_true = y_true[:, 1]  # S wave
+            x = x[:, 1:3]  # Select horizontal components
+        else:
+            raise ValueError(f"Unknown mode {self.mode}")
+
+        y_pred = self.model(x)
+
+        loss = self.loss(y_pred, y_true)
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        loss = self.shared_step(batch)
+        self.log("val_loss", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        return optimizer
+
+    def get_augmentations(self):
+        return [
+            sbg.WindowAroundSample(
+                [key for key, val in phase_dict.items() if val == self.mode],
+                samples_before=1000,
+                windowlen=2000,
+                selection="random",
+                strategy="variable",
+            ),
+            sbg.RandomWindow(
+                windowlen=1000,
+                strategy="pad",
+            ),
+            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+            sbg.StepLabeller(label_columns=phase_dict),
+            sbg.ChangeDtype(np.float32),
+            sbg.ChangeDtype(np.float32, "y"),
+        ]
+
+    def get_eval_augmentations(self):
+        return [
+            sbg.SteeredWindow(windowlen=1000, strategy="pad"),
+            sbg.ChangeDtype(np.float32),
+            sbg.Normalize(demean_axis=-1, amp_norm_axis=-1, amp_norm_type="peak"),
+        ]
+
+    def predict_step(self, batch, batch_idx=None, dataloader_idx=None):
+        x = batch["X"]
+        window_borders = batch["window_borders"]
+
+        pred = self(x)
+
+        score_detection = torch.zeros(pred.shape[0]) * np.nan
+        score_p_or_s = torch.zeros(pred.shape[0]) * np.nan
+        p_sample = torch.zeros(pred.shape[0], dtype=int) * np.nan
+        s_sample = torch.zeros(pred.shape[0], dtype=int) * np.nan
+
+        for i in range(pred.shape[0]):
+            start_sample, end_sample = window_borders[i]
+            local_pred = pred[i, start_sample:end_sample]
+
+            if (local_pred > 0.5).any():
+                sample = np.argmax(local_pred > 0.5)  # First sample exceeding 0.5
+            else:
+                sample = 500  # Simply guess the middle
+
+            if self.mode == "P":
+                p_sample[i] = sample
+            elif self.mode == "S":
+                s_sample[i] = sample
+            else:
+                raise ValueError(f"Unknown mode {self.mode}")
+
+        return score_detection, score_p_or_s, p_sample, s_sample
