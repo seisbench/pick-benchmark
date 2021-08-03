@@ -71,6 +71,11 @@ def main(weights, targets, sets, batchsize, num_workers):
             task_targets = pd.read_csv(task_csv)
             task_targets = task_targets[task_targets["trace_split"] == eval_set]
 
+            restrict_to_phase = config.get("restrict_to_phase", None)
+            if restrict_to_phase is not None and "phase_label" in task_targets.columns:
+                mask = task_targets["phase_label"].isin(list(restrict_to_phase))
+                task_targets = task_targets[mask]
+
             generator = sbg.SteeredGenerator(split, task_targets)
             generator.add_augmentations(model.get_eval_augmentations())
 
