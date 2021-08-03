@@ -856,7 +856,7 @@ class DPPDetectorLit(SeisBenchModuleLit):
         return self.model(x)
 
     def nll_with_probabilities(self, y_pred, y_true):
-        y_pred = torch.log(y_pred)
+        y_pred = torch.log(y_pred + 1e-5)
         return self.nllloss(y_pred, y_true)
 
     def shared_step(self, batch):
