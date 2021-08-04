@@ -30,6 +30,19 @@ def train(config, experiment_name, test_run):
     """
     Runs the model training defined by the config.
 
+    Config parameters:
+
+        - model: Model used as in the models.py file, but without the Lit suffix
+        - data: Dataset used, as in seisbench.data
+        - model_args: Arguments passed to the constructor of the model lightning module
+        - trainer_args: Arguments passed to the lightning trainer
+        - batch_size: Batch size for training and validation
+        - num_workers: Number of workers for data loading.
+          If not set, uses environment variable BENCHMARK_DEFAULT_WORKERS
+        - restrict_to_phase: Filters datasets only to examples containing the given phase.
+          By default, uses all phases.
+        - training_fraction: Fraction of training blocks to use as float between 0 and 1. Defaults to 1.
+
     :param config: Configuration parameters for training
     :param test_run: If true, makes a test run with less data and less logging. Intended for debug purposes.
     """
@@ -103,6 +116,9 @@ def prepare_data(config, model, test_run):
         dev_mask[:500] = True
         dev_data.filter(dev_mask, inplace=True)
 
+    training_fraction = config.get("training_fraction", 1.0)
+    apply_training_fraction(training_fraction, train_data)
+
     train_data.preload_waveforms(pbar=True)
     dev_data.preload_waveforms(pbar=True)
 
@@ -128,6 +144,29 @@ def prepare_data(config, model, test_run):
     )
 
     return train_loader, dev_loader
+
+
+def apply_training_fraction(training_fraction, train_data):
+    """
+    Reduces the size of train_data to train_fraction by inplace filtering.
+    Filter blockwise for efficient memory savings.
+
+    :param training_fraction: Training fraction between 0 and 1.
+    :param train_data: Training dataset
+    :return: None
+    """
+
+    if not 0.0 < training_fraction <= 1.0:
+        raise ValueError("Training fraction needs to be between 0 and 1.")
+
+    if training_fraction < 1:
+        blocks = train_data["trace_name"].apply(lambda x: x.split("$")[0])
+        unique_blocks = blocks.unique()
+        np.random.shuffle(unique_blocks)
+        target_blocks = unique_blocks[: int(training_fraction * len(unique_blocks))]
+        target_blocks = set(target_blocks)
+        mask = blocks.isin(target_blocks)
+        train_data.filter(mask, inplace=True)
 
 
 def generate_phase_mask(dataset, phases):

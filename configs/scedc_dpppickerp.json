@@ -1,6 +1,7 @@
 {
   "model": "DPPPicker",
   "data": "SCEDC",
+  "training_fraction": 0.9,
   "restrict_to_phase": "P",
   "trainer_args": {
     "gpus": 1,

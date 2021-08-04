@@ -1,6 +1,7 @@
 {
   "model": "EQTransformer",
   "data": "SCEDC",
+  "training_fraction": 0.9,
   "trainer_args": {
     "gpus": 1,
     "max_epochs": 100
