@@ -1044,7 +1044,9 @@ class DPPPickerLit(SeisBenchModuleLit):
             local_pred = pred[i, start_sample:end_sample]
 
             if (local_pred > 0.5).any():
-                sample = np.argmax(local_pred > 0.5)  # First sample exceeding 0.5
+                sample = torch.argmax(
+                    (local_pred > 0.5).float()
+                )  # First sample exceeding 0.5
             else:
                 sample = 500  # Simply guess the middle
 

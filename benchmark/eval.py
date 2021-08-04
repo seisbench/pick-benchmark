@@ -76,6 +76,10 @@ def main(weights, targets, sets, batchsize, num_workers):
                 mask = task_targets["phase_label"].isin(list(restrict_to_phase))
                 task_targets = task_targets[mask]
 
+            if restrict_to_phase is not None and task == "1":
+                logging.warning("Skipping task 1 as restrict_to_phase is set.")
+                continue
+
             generator = sbg.SteeredGenerator(split, task_targets)
             generator.add_augmentations(model.get_eval_augmentations())
 
