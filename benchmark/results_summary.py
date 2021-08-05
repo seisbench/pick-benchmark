@@ -362,14 +362,15 @@ def residual_matrix(
             data, model = inv_data_dict[i], inv_model_dict[j]
             mask = np.logical_and(results[ax1] == model, results[ax0] == data)
 
+            axs[true_i, true_j].set_yticklabels([])
+            axs[true_i, true_j].set_xlim(-lim, lim)
+
             subdf = results[mask]
             if np.isnan(subdf[selection]).all():
+                true_j += 1
                 continue
             lr_idx = np.nanargmin(subdf[selection])
             row = subdf.iloc[lr_idx]
-
-            axs[true_i, true_j].set_yticklabels([])
-            axs[true_i, true_j].set_xlim(-lim, lim)
 
             for pred_path_member in pred_path:
                 pred_path_loc = (
