@@ -66,6 +66,9 @@ def main(dataset_name, output, tasks, sampling_rate, noise_before_events):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
 
+    if "split" in dataset.metadata.columns:
+        dataset.filter(dataset["split"].isin(["dev", "test"]), inplace=True)
+
     dataset.preload_waveforms(pbar=True)
 
     if tasks[0]:
