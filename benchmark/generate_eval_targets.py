@@ -159,6 +159,8 @@ def generate_task1(dataset, output, sampling_rate, noise_before_events):
                     labels += [sample]
 
     labels = pd.DataFrame(labels)
+    diff = labels["end_sample"] - labels["start_sample"]
+    labels = labels[diff > 100]
     labels.to_csv(output / "task1.csv", index=False)
 
 
@@ -245,6 +247,8 @@ def generate_task23(dataset, output, sampling_rate):
                     labels += [sample]
 
     labels = pd.DataFrame(labels)
+    diff = labels["end_sample"] - labels["start_sample"]
+    labels = labels[diff > 100]
     labels.to_csv(output / "task23.csv", index=False)
 
 
