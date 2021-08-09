@@ -3,9 +3,11 @@
   "data": "SCEDC",
   "training_fraction": 0.9,
   "restrict_to_phase": "P",
+  "batch_size": 512,
   "trainer_args": {
     "gpus": 1,
-    "max_epochs": 100
+    "max_epochs": 100,
+    "accumulate_grad_batches": 2
   },
   "model_args": {
     "lr": 1e-3,
