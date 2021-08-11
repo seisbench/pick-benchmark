@@ -166,13 +166,26 @@ def eval_task23(version_dir: Path):
 
     dev_pred = dev_pred[~nanmask(dev_pred)]
     test_pred = test_pred[~nanmask(test_pred)]
+
+    skip_task2 = False
+    if (
+        np.logical_or(
+            np.isnan(dev_pred["score_p_or_s"]), np.isinf(dev_pred["score_p_or_s"])
+        ).all()
+        or np.logical_or(
+            np.isnan(test_pred["score_p_or_s"]), np.isinf(test_pred["score_p_or_s"])
+        ).all()
+    ):
+        # For unfortunate combinations of nans and infs, otherwise weird scores can occur
+        skip_task2 = True
+
     # Clipping removes infinitely likely P waves, usually resulting from models trained without S arrivals
     dev_pred["score_p_or_s"] = np.clip(dev_pred["score_p_or_s"].values, -1e100, 1e100)
     test_pred["score_p_or_s"] = np.clip(test_pred["score_p_or_s"].values, -1e100, 1e100)
 
     dev_pred_restricted = dev_pred[~np.isnan(dev_pred["score_p_or_s"])]
     test_pred_restricted = test_pred[~np.isnan(test_pred["score_p_or_s"])]
-    if len(dev_pred_restricted) > 0:
+    if len(dev_pred_restricted) > 0 and not skip_task2:
         prec, recall, thr = precision_recall_curve(
             dev_pred_restricted["phase_label_bin"], dev_pred_restricted["score_p_or_s"]
         )
