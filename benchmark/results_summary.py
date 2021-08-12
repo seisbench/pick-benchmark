@@ -9,18 +9,55 @@ sns.set_style("ticks")
 sns.set_palette("colorblind")
 
 
+# Maps internal model names to model names in plots and tables
+MODEL_ALIASES = {
+    "basicphaseae": "BasicPhaseAE",
+    "cred": "CRED",
+    "dppdetect": "DPP",
+    "dpppickerp": "DPP",
+    "dpppickers": "DPP",
+    "eqtransformer": "EQTransformer",
+    "gpd": "GPD-Org",
+    "gpdpick": "GPD",
+    "phasenet": "PhaseNet",
+}
+# Maps internal data names to model names in plots and tables
+DATA_ALIASES = {
+    "ethz": "ETHZ",
+    "geofon": "GEOFON",
+    "instance": "INSTANCE",
+    "lendb": "LenDB",
+    "neic": "NEIC",
+    "scedc": "SCEDC",
+    "stead": "STEAD",
+}
+# Provides classes for the data used for grouping the datasets
+DATA_CLASSES = {
+    "ethz": "regional",
+    "geofon": "tele",
+    "instance": "regional",
+    "lendb": "regional",
+    "neic": "tele",
+    "scedc": "regional",
+    "stead": "regional",
+}
+
+
 def main():
     results = pd.read_csv("results.csv")
 
     detect_missing_entries(results)
 
     print("Generating tables")
+    results_tables(results, suffix="_gpd")
+    results = results[results["model"] != "gpd"]
     results_tables(results)
 
     print("Generating plots")
     results_plots(results)
 
     results_cross = pd.read_csv("results_cross.csv")
+    results = pd.read_csv("results.csv")  # Reload data to include gpd results
     # Add "diagonal" entries
     results["target"] = results["data"]
     results_cross = results_cross.append(results)
@@ -98,14 +135,17 @@ def model_results(results_cross, model):
     plt.close(fig)
 
 
-def results_tables(results):
+def results_tables(results, suffix=None):
+    if suffix is None:
+        suffix = ""
+
     table = results_to_table(
         results,
         ["test_det_precision", "test_det_recall", "test_det_f1"],
         "dev_det_f1",
         ["P", "R", "F1"],
     )
-    with open("results/detection_test.tex", "w") as f:
+    with open(f"results/detection_test{suffix}.tex", "w") as f:
         f.write(table)
 
     table = results_to_table(
@@ -114,7 +154,7 @@ def results_tables(results):
         "dev_phase_f1",
         ["P", "R", "F1"],
     )
-    with open("results/phase_test.tex", "w") as f:
+    with open(f"results/phase_test{suffix}.tex", "w") as f:
         f.write(table)
 
     table = results_to_table(
@@ -125,7 +165,7 @@ def results_tables(results):
         minimize=True,
         average=[1, 2],
     )
-    with open("results/precision_p_test.tex", "w") as f:
+    with open(f"results/precision_p_test{suffix}.tex", "w") as f:
         f.write(table)
 
     table = results_to_table(
@@ -136,7 +176,7 @@ def results_tables(results):
         minimize=True,
         average=[1, 2],
     )
-    with open("results/precision_s_test.tex", "w") as f:
+    with open(f"results/precision_s_test{suffix}.tex", "w") as f:
         f.write(table)
 
 
@@ -182,8 +222,18 @@ def results_to_array(results, cols, selection, minimize=False, axis=("data", "mo
     """
     ax0, ax1 = axis
 
-    data_dict = {data: i for i, data in enumerate(sorted(results[ax0].unique()))}
-    model_dict = {model: i for i, model in enumerate(sorted(results[ax1].unique()))}
+    def generate_dict(ax):
+        if ax == "data" or ax == "target":
+            # Sort the datasets first by their class, than alphabetically
+            data_class = [(DATA_CLASSES[data], data) for data in results[ax].unique()]
+            keys = [x[1] for x in sorted(data_class)]
+        else:
+            # Sort the models alphabetically
+            keys = sorted(results[ax].unique())
+        return {x: i for i, x in enumerate(keys)}
+
+    data_dict = generate_dict(ax0)
+    model_dict = generate_dict(ax1)
 
     n_data = len(results[ax0].unique())
     n_model = len(results[ax1].unique())
@@ -242,15 +292,21 @@ def results_to_table(
     inv_data_dict = {v: k for k, v in data_dict.items()}
     inv_model_dict = {v: k for k, v in model_dict.items()}
 
-    header = f"\\backslashbox{{{ax0}}}{{{ax1}}}"
+    header = f"\\backslashbox{{{ax0.capitalize()}}}{{{ax1.capitalize()}}}"
     header_count = 0
     for j in range(n_model):
         if np.isnan(res_array[:, j]).all():
             # print(f"Skipping {inv_model_dict[j]}")
             continue
-        header += f" & \multicolumn{{{len(cols)}}}{{|c}}{{{inv_model_dict[j]}}}"
+        col_name = inv_model_dict[j]
+        if ax1 == "data" or ax1 == "target":
+            col_name = DATA_ALIASES[col_name]
+        else:
+            col_name = MODEL_ALIASES[col_name]
+
+        header += f" & \multicolumn{{{len(cols)}}}{{|c}}{{{col_name}}}"
         header_count += 1
-    header += f" & \multicolumn{{{len(average)}}}{{|c}}{{average}} \\\\"
+    header += f" & \multicolumn{{{len(average)}}}{{|c}}{{$\\diameter$}} \\\\"
 
     avg_labels = [label for i, label in enumerate(labels) if i in average]
 
@@ -266,6 +322,11 @@ def results_to_table(
 
     for i in range(n_data):
         line = inv_data_dict[i]
+        if ax0 == "data" or ax0 == "target":
+            line = DATA_ALIASES[line]
+        else:
+            line = MODEL_ALIASES[line]
+
         if np.isnan(res_array[i]).all():
             # print(f"Skipping {inv_data_dict[i]}")
             continue
@@ -286,7 +347,7 @@ def results_to_table(
 
     table_str.append("\\hline")
 
-    line = "average"
+    line = "$\\diameter$"
     for j in range(n_model):
         if np.isnan(res_array[:, j]).all():
             # print(f"Skipping {inv_model_dict[j]}")
@@ -307,7 +368,7 @@ def results_to_table(
 
 
 def residual_matrix(
-    phase, results, pred_path, selection, lim=2, axis=("data", "model")
+    phase, results, pred_path, selection, lim=1.5, axis=("data", "model")
 ):
     """
     Plots pick residual distributions for each model and dataset in a grid
@@ -362,6 +423,7 @@ def residual_matrix(
             data, model = inv_data_dict[i], inv_model_dict[j]
             mask = np.logical_and(results[ax1] == model, results[ax0] == data)
 
+            axs[true_i, true_j].set_yticks([])
             axs[true_i, true_j].set_yticklabels([])
             axs[true_i, true_j].set_xlim(-lim, lim)
 
@@ -396,7 +458,11 @@ def residual_matrix(
             bins = np.linspace(-lim, lim, 50)
             axs[true_i, true_j].hist(diff, bins=bins)
 
-            axs[0, true_j].set_title(model)
+            if ax1 == "model":
+                title = MODEL_ALIASES[model]
+            else:
+                title = DATA_ALIASES[model]
+            axs[0, true_j].set_title(title)
 
             outliers = np.abs(diff) > lim
             frac_outliers = np.sum(outliers) / len(diff)
@@ -414,7 +480,11 @@ def residual_matrix(
 
             true_j += 1
 
-        axs[true_i, 0].set_ylabel(data)
+        if ax0 == "model":
+            ylabel = MODEL_ALIASES[data]
+        else:
+            ylabel = DATA_ALIASES[data]
+        axs[true_i, 0].set_ylabel(ylabel)
 
         true_i += 1
 
@@ -422,9 +492,9 @@ def residual_matrix(
         ax.set_xlabel("$t_{pred} - t_{true}$")
 
     mid_left_ax = axs[axs.shape[0] // 2, 0]
-    mid_left_ax.set_ylabel(ax0 + "\n" + mid_left_ax.get_ylabel())
+    mid_left_ax.set_ylabel(ax0.capitalize() + "\n" + mid_left_ax.get_ylabel())
     mid_top_ax = axs[0, axs.shape[1] // 2]
-    mid_top_ax.set_title(ax1 + "\n" + mid_top_ax.get_title())
+    mid_top_ax.set_title(ax1.capitalize() + "\n" + mid_top_ax.get_title())
 
     return fig
 
