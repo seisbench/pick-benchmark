@@ -57,6 +57,18 @@ def main(weights, targets, sets, batchsize, num_workers):
 
     for eval_set in sets:
         split = dataset.get_split(eval_set)
+        if targets.name == "instance":
+            logging.warning(
+                "Overwriting noise trace_names to allow correct identification"
+            )
+            # Replace trace names for noise entries
+            split._metadata["trace_name"].values[
+                -len(split.datasets[-1]) :
+            ] = split._metadata["trace_name"][-len(split.datasets[-1]) :].apply(
+                lambda x: "noise_" + x
+            )
+            split._build_trace_name_to_idx_dict()
+
         logging.warning(f"Starting set {eval_set}")
         split.preload_waveforms(pbar=True)
 
@@ -70,6 +82,11 @@ def main(weights, targets, sets, batchsize, num_workers):
 
             task_targets = pd.read_csv(task_csv)
             task_targets = task_targets[task_targets["trace_split"] == eval_set]
+            if task == "1" and targets.name == "instance":
+                border = _identify_instance_dataset_border(task_targets)
+                task_targets["trace_name"].values[border:] = task_targets["trace_name"][
+                    border:
+                ].apply(lambda x: "noise_" + x)
 
             restrict_to_phase = config.get("restrict_to_phase", None)
             if restrict_to_phase is not None and "phase_label" in task_targets.columns:
@@ -115,6 +132,20 @@ def main(weights, targets, sets, batchsize, num_workers):
             )
             pred_path.parent.mkdir(exist_ok=True, parents=True)
             task_targets.to_csv(pred_path, index=False)
+
+
+def _identify_instance_dataset_border(task_targets):
+    """
+    Calculates the dataset border between Signal and Noise for instance,
+    assuming it is the only place where the bucket number does not increase
+    """
+    buckets = task_targets["trace_name"].apply(lambda x: int(x.split("$")[0][6:]))
+
+    last_bucket = 0
+    for i, bucket in enumerate(buckets):
+        if bucket < last_bucket:
+            return i
+        last_bucket = bucket
 
 
 def load_best_model(model_cls, weights, version):
