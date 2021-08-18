@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
+import logging
+import argparse
 
 sns.set(font_scale=1.5)
 sns.set_style("ticks")
@@ -43,27 +45,93 @@ DATA_CLASSES = {
 }
 
 
-def main():
-    results = pd.read_csv("results.csv")
+def main(base, cross, resampled):
+    if not (base or cross or resampled):
+        logging.warning("No task selected. exiting.")
 
-    detect_missing_entries(results)
+    if base:
+        results = pd.read_csv("results.csv")
 
-    print("Generating tables")
-    results_tables(results, suffix="_gpd")
-    results = results[results["model"] != "gpd"]
-    results_tables(results)
+        detect_missing_entries(results)
+        print("Generating tables")
+        results_tables(results, suffix="_gpd")
+        results = results[results["model"] != "gpd"]
+        results_tables(results)
 
-    print("Generating plots")
-    results_plots(results)
+        print("Generating plots")
+        results_plots(results)
 
-    results_cross = pd.read_csv("results_cross.csv")
-    results = pd.read_csv("results.csv")  # Reload data to include gpd results
-    # Add "diagonal" entries
-    results["target"] = results["data"]
-    results_cross = results_cross.append(results)
+    if cross:
+        results_cross = pd.read_csv("results_cross.csv")
+        results = pd.read_csv("results.csv")  # Reload data to include gpd results
+        # Add "diagonal" entries
+        results["target"] = results["data"]
+        results_cross = results_cross.append(results)
 
-    for model in results["model"].unique():
-        model_results(results_cross, model)
+        for model in results["model"].unique():
+            model_results(results_cross, model)
+
+    if resampled:
+        print("Generating resampled tables")
+        results = pd.read_csv("results_resampled.csv")
+        resampled_tables(results[results["target"] == "geofon"], suffix="_geofon")
+        resampled_tables(results[results["target"] == "neic"], suffix="_neic")
+
+        print("Generating resampled plots")
+        resampled_plots(results[results["target"] == "geofon"], suffix="_geofon")
+        resampled_plots(results[results["target"] == "neic"], suffix="_neic")
+
+
+def resampled_tables(results, suffix):
+    table = results_to_table(
+        results,
+        ["test_det_precision", "test_det_recall", "test_det_f1"],
+        "dev_det_f1",
+        ["P", "R", "F1"],
+    )
+    with open(f"results/resampled/detection_test{suffix}.tex", "w") as f:
+        f.write(table)
+
+    table = results_to_table(
+        results,
+        ["test_phase_precision", "test_phase_recall", "test_phase_f1"],
+        "dev_phase_f1",
+        ["P", "R", "F1"],
+    )
+    with open(f"results/resampled/phase_test{suffix}.tex", "w") as f:
+        f.write(table)
+
+    table = results_to_table(
+        results,
+        ["test_P_mean_s", "test_P_std_s", "test_P_mae_s"],
+        "dev_P_std_s",
+        ["$\\mu$", "$\\sigma$", "MAE"],
+        minimize=True,
+        average=[1, 2],
+    )
+    with open(f"results/resampled/precision_p_test{suffix}.tex", "w") as f:
+        f.write(table)
+
+    table = results_to_table(
+        results,
+        ["test_S_mean_s", "test_S_std_s", "test_S_mae_s"],
+        "dev_S_std_s",
+        ["$\\mu$", "$\\sigma$", "MAE"],
+        minimize=True,
+        average=[1, 2],
+    )
+    with open(f"results/resampled/precision_s_test{suffix}.tex", "w") as f:
+        f.write(table)
+
+
+def resampled_plots(results, suffix):
+    fig = residual_matrix("P", results, Path("pred_cross_resampled"), "dev_P_std_s")
+    fig.savefig(f"results/resampled/test_P_diff{suffix}.eps", bbox_inches="tight")
+    plt.close(fig)
+
+    fig = residual_matrix("S", results, Path("pred_cross_resampled"), "dev_S_std_s")
+    fig.savefig(f"results/resampled/test_S_diff{suffix}.eps", bbox_inches="tight")
+    plt.close(fig)
 
 
 def model_results(results_cross, model):
@@ -500,4 +568,24 @@ def residual_matrix(
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Generate plots and tables for results"
+    )
+    parser.add_argument(
+        "--base",
+        action="store_true",
+        help="If true, creates outputs for basic experiments (including GPD).",
+    )
+    parser.add_argument(
+        "--cross",
+        action="store_true",
+        help="If true, creates outputs for cross-domain experiments.",
+    )
+    parser.add_argument(
+        "--resampled",
+        action="store_true",
+        help="If true, creates outputs for resampled experiments.",
+    )
+
+    args = parser.parse_args()
+    main(args.base, args.cross, args.resampled)
