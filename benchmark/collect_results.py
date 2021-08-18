@@ -7,7 +7,7 @@ from sklearn.metrics import precision_recall_curve, precision_recall_fscore_supp
 from tqdm import tqdm
 
 
-def traverse_path(path, output, cross=False):
+def traverse_path(path, output, cross=False, resampled=False):
     """
     Traverses the given path and extracts results for each experiment and version
 
@@ -26,7 +26,9 @@ def traverse_path(path, output, cross=False):
             if not version_dir.is_dir():
                 pass
 
-            results.append(process_version(version_dir, cross=cross))
+            results.append(
+                process_version(version_dir, cross=cross, resampled=resampled)
+            )
 
     results = pd.DataFrame(results)
     if cross:
@@ -37,7 +39,7 @@ def traverse_path(path, output, cross=False):
     results.to_csv(output, index=False)
 
 
-def process_version(version_dir: Path, cross: bool):
+def process_version(version_dir: Path, cross: bool, resampled: bool):
     """
     Extracts statistics for the given version of the given experiment.
 
@@ -45,7 +47,7 @@ def process_version(version_dir: Path, cross: bool):
     :param cross: If true, expects cross-domain results.
     :return: Results dictionary
     """
-    stats = parse_exp_name(version_dir, cross=cross)
+    stats = parse_exp_name(version_dir, cross=cross, resampled=resampled)
 
     stats.update(eval_task1(version_dir))
     stats.update(eval_task23(version_dir))
@@ -53,17 +55,24 @@ def process_version(version_dir: Path, cross: bool):
     return stats
 
 
-def parse_exp_name(version_dir, cross):
+def parse_exp_name(version_dir, cross, resampled):
     exp_name = version_dir.parent.name
     version = version_dir.name.split("_")[-1]
 
     parts = exp_name.split("_")
     target = None
+    sampling_rate = None
     if cross:
         if len(parts) == 4:
             data, model, lr, target = parts
         else:
             data, model, target = parts
+            lr = "0.001"
+    elif resampled:
+        if len(parts) == 5:
+            data, model, lr, target, sampling_rate = parts
+        else:
+            data, model, target, sampling_rate = parts
             lr = "0.001"
     else:
         if len(parts) == 3:
@@ -84,6 +93,9 @@ def parse_exp_name(version_dir, cross):
 
     if cross:
         stats["target"] = target
+    if resampled:
+        stats["target"] = target
+        stats["sampling_rate"] = sampling_rate
 
     return stats
 
@@ -251,7 +263,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cross", action="store_true", help="If true, expects cross-domain results."
     )
+    parser.add_argument(
+        "--resampled",
+        action="store_true",
+        help="If true, expects cross-domain cross-sampling rate results.",
+    )
 
     args = parser.parse_args()
 
-    traverse_path(args.path, args.output, cross=args.cross)
+    traverse_path(args.path, args.output, cross=args.cross, resampled=args.resampled)

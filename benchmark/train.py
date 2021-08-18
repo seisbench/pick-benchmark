@@ -14,16 +14,7 @@ import logging
 
 import data
 import models
-
-default_workers = os.getenv("BENCHMARK_DEFAULT_WORKERS", None)
-if default_workers is None:
-    logging.warning(
-        "BENCHMARK_DEFAULT_WORKERS not set. "
-        "Will use 12 workers if not specified otherwise in configuration."
-    )
-    default_workers = 12
-else:
-    default_workers = int(default_workers)
+from util import default_workers
 
 
 def train(config, experiment_name, test_run):

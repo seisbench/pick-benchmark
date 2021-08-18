@@ -12,8 +12,7 @@ import torch
 import models
 import data
 import logging
-
-from benchmark.util import load_best_model
+from util import load_best_model, default_workers
 
 data_aliases = {
     "ethz": "ETHZ",
@@ -26,7 +25,7 @@ data_aliases = {
 }
 
 
-def main(weights, targets, sets, batchsize, num_workers):
+def main(weights, targets, sets, batchsize, num_workers, sampling_rate=None):
     weights = Path(weights)
     targets = Path(targets)
     sets = sets.split(",")
@@ -55,6 +54,11 @@ def main(weights, targets, sets, batchsize, num_workers):
     dataset = data.get_dataset_by_name(data_name)(
         sampling_rate=100, component_order="ZNE", dimension_order="NCW", cache="full"
     )
+
+    if sampling_rate is not None:
+        dataset.sampling_rate = sampling_rate
+        pred_root = pred_root + "_resampled"
+        weight_path_name = weight_path_name + f"_{sampling_rate}"
 
     for eval_set in sets:
         split = dataset.get_split(eval_set)
@@ -88,6 +92,17 @@ def main(weights, targets, sets, batchsize, num_workers):
                 task_targets["trace_name"].values[border:] = task_targets["trace_name"][
                     border:
                 ].apply(lambda x: "noise_" + x)
+
+            if sampling_rate is not None:
+                for key in ["start_sample", "end_sample", "phase_onset"]:
+                    if key not in task_targets.columns:
+                        continue
+                    task_targets[key] = (
+                        task_targets[key]
+                        * sampling_rate
+                        / task_targets["sampling_rate"]
+                    )
+                task_targets[sampling_rate] = sampling_rate
 
             restrict_to_phase = config.get("restrict_to_phase", None)
             if restrict_to_phase is not None and "phase_label" in task_targets.columns:
@@ -177,7 +192,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batchsize", type=int, default=1024, help="Batch size")
     parser.add_argument(
-        "--num_workers", default=12, help="Number of workers for data loader"
+        "--num_workers",
+        default=default_workers,
+        help="Number of workers for data loader",
+    )
+    parser.add_argument(
+        "--sampling_rate", type=float, help="Overwrites the sampling rate in the data"
     )
     args = parser.parse_args()
 
@@ -187,4 +207,5 @@ if __name__ == "__main__":
         args.sets,
         batchsize=args.batchsize,
         num_workers=args.num_workers,
+        sampling_rate=args.sampling_rate,
     )

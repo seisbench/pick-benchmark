@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import os
+import logging
 
 
 def load_best_model(model_cls, weights, version):
@@ -30,3 +32,14 @@ def load_best_model(model_cls, weights, version):
     )
 
     return model_cls.load_from_checkpoint(checkpoint_path)
+
+
+default_workers = os.getenv("BENCHMARK_DEFAULT_WORKERS", None)
+if default_workers is None:
+    logging.warning(
+        "BENCHMARK_DEFAULT_WORKERS not set. "
+        "Will use 12 workers if not specified otherwise in configuration."
+    )
+    default_workers = 12
+else:
+    default_workers = int(default_workers)
