@@ -18,7 +18,7 @@ data_aliases = {
     "geofon": "GEOFON",
     "stead": "STEAD",
     "neic": "NEIC",
-    "instance": "InstanceCountsCombined",
+    "instance": "InstanceCounts",
     "lendb": "LenDB",
     "scedc": "SCEDC",
 }
