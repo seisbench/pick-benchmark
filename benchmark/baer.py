@@ -9,6 +9,8 @@ from bayes_opt.logger import JSONLogger, ScreenLogger
 from bayes_opt.event import Events
 import argparse
 import os
+import json
+import logging
 
 import data
 
@@ -25,7 +27,7 @@ data_aliases = {
 
 
 class BaerKradolfer:
-    def __init__(self, lp, hp, tdownmax, tupevent, thr1, windowlens):
+    def __init__(self, lp, hp, tdownmax, tupevent, thr1, windowlens=(6000, 2000, 1000)):
         self.lp = lp
         self.hp = hp
         self.tdownmax = tdownmax
@@ -77,6 +79,22 @@ class BaerKradolfer:
 
         return pred_relative_to_p0
 
+    @classmethod
+    def load_from_log(cls, path):
+        opt = -np.inf
+        params = {}
+        with open(path, "r") as f:
+            for line in f:
+                if not line.strip():
+                    pass
+                parsed_line = json.loads(line)
+                if parsed_line["target"] > opt:
+                    opt = parsed_line["target"]
+                    params = parsed_line["params"]
+
+        logging.warning(f"Optimal value: {- opt:.1f}\tParams: {params}")
+        return cls(**params)
+
 
 def train(target, pbar, limit):
     np.random.seed(42)
@@ -110,9 +128,7 @@ def train(target, pbar, limit):
         "thr1": (1, 40),
     }
 
-    picker = BaerKradolfer(
-        0, 0, 0, 0, 0, [6000, 2000, 1000]
-    )  # Parameters will anyhow be overwritten
+    picker = BaerKradolfer(0, 0, 0, 0, 0)  # Parameters will anyhow be overwritten
 
     def fitness(lp, hp, tdownmax, tupevent, thr1):
         """
@@ -187,13 +203,53 @@ def train(target, pbar, limit):
     print(optimizer.max)
 
 
+def eval(source, target):
+    targets = Path("targets") / target / "task23.csv"
+    targets = pd.read_csv(targets)
+    targets = targets[targets["phase_label"] == "P"]
+
+    dataset = data.get_dataset_by_name(data_aliases[target])(
+        sampling_rate=100, component_order="Z", dimension_order="NCW", cache=None
+    )  # Caching is disabled to save memory. We only expect a relatively minor impact on speed in this case.
+
+    model_path = Path("baer_logs") / f"{source}.json"
+    model = BaerKradolfer.load_from_log(model_path)
+
+    for eval_set in ["dev", "test"]:
+        logging.warning(f"Starting set {eval_set}")
+        split = dataset.get_split(eval_set)
+        split.preload_waveforms(pbar=True)
+
+        split_targets = targets[targets["trace_split"] == eval_set].copy()
+
+        generator = sbg.SteeredGenerator(split, split_targets)
+        generator.add_augmentations(model.get_augmentations())
+
+        preds = []
+        itr = tqdm(range(len(generator)), total=len(generator))
+
+        for i in itr:
+            pred_relative_to_p0 = model.predict(generator[i])
+            preds.append(pred_relative_to_p0)
+
+        split_targets["p_sample_pred"] = preds + split_targets["start_sample"]
+
+        pred_path = Path("pred_baer") / f"{eval_set}_task23.csv"
+        pred_path.parent.mkdir(exist_ok=True, parents=True)
+        split_targets.to_csv(pred_path, index=False)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("action", type=str)
     parser.add_argument("--target", type=str, required=True)
+    parser.add_argument("--source", type=str)
     parser.add_argument("--pbar", action="store_true")
     parser.add_argument("--limit", type=int, default=2500)
     args = parser.parse_args()
 
     if args.action == "train":
         train(args.target, pbar=args.pbar, limit=args.limit)
+
+    if args.action == "eval":
+        eval(source=args.source, target=args.target)
