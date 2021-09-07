@@ -5,6 +5,7 @@ import seaborn as sns
 from pathlib import Path
 import logging
 import argparse
+from collections import Counter
 
 sns.set(font_scale=1.5)
 sns.set_style("ticks")
@@ -125,11 +126,15 @@ def resampled_tables(results, suffix):
 
 
 def resampled_plots(results, suffix):
-    fig = residual_matrix("P", results, Path("pred_cross_resampled"), "dev_P_std_s")
+    fig = residual_matrix(
+        "P", results, Path("pred_cross_resampled"), "dev_P_std_s", adjust_scale=False
+    )
     fig.savefig(f"results/resampled/test_P_diff{suffix}.eps", bbox_inches="tight")
     plt.close(fig)
 
-    fig = residual_matrix("S", results, Path("pred_cross_resampled"), "dev_S_std_s")
+    fig = residual_matrix(
+        "S", results, Path("pred_cross_resampled"), "dev_S_std_s", adjust_scale=False
+    )
     fig.savefig(f"results/resampled/test_S_diff{suffix}.eps", bbox_inches="tight")
     plt.close(fig)
 
@@ -188,6 +193,7 @@ def model_results(results_cross, model):
         [Path("pred"), Path("pred_cross")],
         "dev_P_std_s",
         axis=("data", "target"),
+        separation=(4, 4),
     )
     fig.savefig(f"results/cross/{model}_test_P_diff.eps", bbox_inches="tight")
     plt.close(fig)
@@ -198,6 +204,7 @@ def model_results(results_cross, model):
         [Path("pred"), Path("pred_cross")],
         "dev_S_std_s",
         axis=("data", "target"),
+        separation=(4, 4),
     )
     fig.savefig(f"results/cross/{model}_test_S_diff.eps", bbox_inches="tight")
     plt.close(fig)
@@ -249,11 +256,15 @@ def results_tables(results, suffix=None):
 
 
 def results_plots(results):
-    fig = residual_matrix("P", results, Path("pred"), "dev_P_std_s")
+    fig = residual_matrix(
+        "P", results, Path("pred"), "dev_P_std_s", separation=(4, None)
+    )
     fig.savefig("results/test_P_diff.eps", bbox_inches="tight")
     plt.close(fig)
 
-    fig = residual_matrix("S", results, Path("pred"), "dev_S_std_s")
+    fig = residual_matrix(
+        "S", results, Path("pred"), "dev_S_std_s", separation=(4, None)
+    )
     fig.savefig("results/test_S_diff.eps", bbox_inches="tight")
     plt.close(fig)
 
@@ -294,11 +305,13 @@ def results_to_array(results, cols, selection, minimize=False, axis=("data", "mo
         if ax == "data" or ax == "target":
             # Sort the datasets first by their class, than alphabetically
             data_class = [(DATA_CLASSES[data], data) for data in results[ax].unique()]
-            keys = [x[1] for x in sorted(data_class)]
+            data_class = sorted(data_class)
+            keys = [x[1] for x in data_class]
         else:
             # Sort the models alphabetically
             keys = sorted(results[ax].unique())
-        return {x: i for i, x in enumerate(keys)}
+        ax_dict = {x: i for i, x in enumerate(keys)}
+        return ax_dict
 
     data_dict = generate_dict(ax0)
     model_dict = generate_dict(ax1)
@@ -436,7 +449,14 @@ def results_to_table(
 
 
 def residual_matrix(
-    phase, results, pred_path, selection, lim=1.5, axis=("data", "model")
+    phase,
+    results,
+    pred_path,
+    selection,
+    lim=1.5,
+    axis=("data", "model"),
+    separation=(None, None),
+    adjust_scale=True,
 ):
     """
     Plots pick residual distributions for each model and dataset in a grid
@@ -448,12 +468,14 @@ def residual_matrix(
                       (in case of multiple learning rates, ...)
     :param lim: Plotting limit for the distributions
     :param axis: Axis of the grid, by default "data" and "model"
+    :param separation: Points for splitting grid. If non, won't split grid in this axis.
     :return: Matplotlib figure handle
     """
     if not isinstance(pred_path, list):
         pred_path = [pred_path]
 
     ax0, ax1 = axis
+    sep0, sep1 = separation
     data_dict, model_dict, res_array = results_to_array(
         results, [f"test_{phase}_mean_s"], selection, minimize=True, axis=axis
     )
@@ -472,13 +494,54 @@ def residual_matrix(
         return plt.figure()
 
     fig = plt.figure(figsize=(15, 15))
-    axs = fig.subplots(
-        true_n_data,
-        true_n_model,
-        sharex=True,
-        sharey=False,
-        gridspec_kw={"hspace": 0.05, "wspace": 0.05},
+
+    def splits_from_sep(sep, true_n):
+        if sep is None:
+            splits = (true_n,)
+        else:
+            splits = (sep, true_n - sep)
+        return splits
+
+    ax0splits = splits_from_sep(sep0, true_n_data)
+    ax1splits = splits_from_sep(sep1, true_n_model)
+
+    gs = fig.add_gridspec(
+        len(ax0splits),
+        len(ax1splits),
+        hspace=0.1,
+        wspace=0.1,
+        height_ratios=ax0splits,
+        width_ratios=ax1splits,
     )
+    sub_gslist = []
+    for i in range(len(ax0splits)):
+        tmp = []
+        for j in range(len(ax1splits)):
+            tmp.append(
+                gs[i, j].subgridspec(
+                    ax0splits[i], ax1splits[j], hspace=0.05, wspace=0.05
+                )
+            )
+        sub_gslist.append(tmp)
+
+    if sep0 is None:
+        sep0 = true_n_data
+    if sep1 is None:
+        sep1 = true_n_model
+
+    axs = np.empty((true_n_data, true_n_model), dtype=object)
+    for i in range(true_n_data):
+        for j in range(true_n_model):
+            if i < sep0:
+                if j < sep1:
+                    axs[i, j] = fig.add_subplot(sub_gslist[0][0][i, j])
+                else:
+                    axs[i, j] = fig.add_subplot(sub_gslist[0][1][i, j - sep1])
+            else:
+                if j < sep1:
+                    axs[i, j] = fig.add_subplot(sub_gslist[1][0][i - sep0, j])
+                else:
+                    axs[i, j] = fig.add_subplot(sub_gslist[1][1][i - sep0, j - sep1])
 
     true_i = 0
     for i in range(n_data):
@@ -486,6 +549,11 @@ def residual_matrix(
             continue
         true_j = 0
         for j in range(n_model):
+            local_lim = lim
+            if true_i < sep0 and true_j < sep1 and adjust_scale:
+                local_lim = 0.45
+                axs[true_i, true_j].set_xticks([-0.3, 0, 0.3])
+
             if np.isnan(res_array[:, j]).all():
                 continue
             data, model = inv_data_dict[i], inv_model_dict[j]
@@ -493,7 +561,7 @@ def residual_matrix(
 
             axs[true_i, true_j].set_yticks([])
             axs[true_i, true_j].set_yticklabels([])
-            axs[true_i, true_j].set_xlim(-lim, lim)
+            axs[true_i, true_j].set_xlim(-local_lim, local_lim)
 
             subdf = results[mask]
             if np.isnan(subdf[selection]).all():
@@ -523,7 +591,10 @@ def residual_matrix(
                 "sampling_rate"
             ]
 
-            bins = np.linspace(-lim, lim, 50)
+            axs[true_i, true_j].axvline(np.mean(diff), c="C1", lw=3)
+            axs[true_i, true_j].axvline(np.median(diff), c="C2", lw=3)
+
+            bins = np.linspace(-local_lim, local_lim, 50)
             axs[true_i, true_j].hist(diff, bins=bins)
 
             if ax1 == "model":
@@ -532,10 +603,12 @@ def residual_matrix(
                 title = DATA_ALIASES[model]
             axs[0, true_j].set_title(title)
 
-            outliers = np.abs(diff) > lim
+            outliers = np.abs(diff) > local_lim
             frac_outliers = np.sum(outliers) / len(diff)
-            diff[outliers] = lim
-            # std_outlierfree = np.std(diff)
+            mae = np.mean(np.abs(diff))
+            rmse = np.sqrt(np.mean(diff ** 2))
+
+            lineheight = 0.13
             axs[true_i, true_j].text(
                 0.98,
                 0.98,
@@ -544,7 +617,49 @@ def residual_matrix(
                 ha="right",
                 va="top",
             )
-            # axs[true_i, true_j].text(0.98, 0.87, f"{std_outlierfree:.2f}", transform=axs[true_i, true_j].transAxes, ha="right", va="top")
+            axs[true_i, true_j].text(
+                0.98,
+                0.98 - lineheight,
+                f"{mae:.2f}",
+                transform=axs[true_i, true_j].transAxes,
+                ha="right",
+                va="top",
+            )
+            axs[true_i, true_j].text(
+                0.98,
+                0.98 - 2 * lineheight,
+                f"{rmse:.2f}",
+                transform=axs[true_i, true_j].transAxes,
+                ha="right",
+                va="top",
+            )
+            axs[true_i, true_j].text(
+                0.02,
+                0.98,
+                "OUT",
+                transform=axs[true_i, true_j].transAxes,
+                ha="left",
+                va="top",
+            )
+            axs[true_i, true_j].text(
+                0.02,
+                0.98 - lineheight,
+                "MAE",
+                transform=axs[true_i, true_j].transAxes,
+                ha="left",
+                va="top",
+            )
+            axs[true_i, true_j].text(
+                0.02,
+                0.98 - 2 * lineheight,
+                "RMSE",
+                transform=axs[true_i, true_j].transAxes,
+                ha="left",
+                va="top",
+            )
+
+            if data == "neic" and model == "eqtransformer":
+                axs[true_i, true_j].set_facecolor("#aaaaaa")
 
             true_j += 1
 
