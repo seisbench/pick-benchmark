@@ -6,6 +6,7 @@ from pathlib import Path
 import logging
 import argparse
 from collections import Counter
+from sklearn.metrics import roc_curve, roc_auc_score
 
 sns.set(font_scale=1.5)
 sns.set_style("ticks")
@@ -23,6 +24,18 @@ MODEL_ALIASES = {
     "gpd": "GPD-Org",
     "gpdpick": "GPD",
     "phasenet": "PhaseNet",
+}
+# Maps internal model names to model abbreviations in plots and tables
+MODEL_ABBREVIATIONS = {
+    "basicphaseae": "BPAE",
+    "cred": "CRED",
+    "dppdetect": "DPP",
+    "dpppickerp": "DPP",
+    "dpppickers": "DPP",
+    "eqtransformer": "EQT",
+    "gpd": "GPD-O",
+    "gpdpick": "GPD",
+    "phasenet": "PN",
 }
 # Maps internal data names to model names in plots and tables
 DATA_ALIASES = {
@@ -44,10 +57,19 @@ DATA_CLASSES = {
     "scedc": "regional",
     "stead": "regional",
 }
+# Provides limits for the ROC curves
+ROC_LIMITS = {
+    "ethz": 0.3,
+    "geofon": 0.5,
+    "instance": 0.3,
+    "lendb": 0.3,
+    "scedc": 0.5,
+    "stead": 0.1,
+}
 
 
-def main(base, cross, resampled):
-    if not (base or cross or resampled):
+def main(base, cross, resampled, roc):
+    if not (base or cross or resampled or roc):
         logging.warning("No task selected. exiting.")
 
     if base:
@@ -61,6 +83,14 @@ def main(base, cross, resampled):
 
         print("Generating plots")
         results_plots(results)
+
+    if roc:
+        results = pd.read_csv("results.csv")
+        results = results[results["model"] != "gpd"]
+
+        print("Generating ROC")
+        fig = results_roc(results, "dev_det_f1")
+        fig.savefig("results/detection_roc.eps", bbox_inches="tight")
 
     if cross:
         results_cross = pd.read_csv("results_cross.csv")
@@ -285,6 +315,109 @@ def detect_missing_entries(results):
                 mask = np.logical_and(mask, results["lr"] == lr)
                 if np.sum(mask) != 1:
                     print(np.sum(mask), data, model, lr)
+
+
+def results_roc(results, selection, cols=2):
+    data_dict, model_dict, res_array = results_to_array(
+        results,
+        ["test_det_precision", "test_det_recall", "test_det_f1"],
+        selection,
+        minimize=False,
+    )
+    pred_path = [Path("pred")]
+
+    res_array = res_array[:, :, 0]
+
+    n_data = len(data_dict)
+    n_model = len(model_dict)
+
+    inv_data_dict = {v: k for k, v in data_dict.items()}
+    inv_model_dict = {v: k for k, v in model_dict.items()}
+
+    true_n_data = np.sum((~np.isnan(res_array)).any(axis=1))
+    true_n_model = np.sum((~np.isnan(res_array)).any(axis=0))
+
+    rows = int(np.ceil(true_n_data / cols))
+
+    if true_n_data == 0 or true_n_model == 0:
+        return plt.figure()
+
+    fig = plt.figure(figsize=(5 * cols, 5 * rows))
+    axs = fig.subplots(rows, cols)
+
+    lineheight = 0.07
+
+    true_i = 0
+    for i in range(n_data):
+        if np.isnan(res_array[i]).all():
+            continue
+        true_j = 0
+        ax = axs[true_i // cols, true_i % cols]
+        for j in range(n_model):
+            if np.isnan(res_array[:, j]).all():
+                continue
+            data, model = inv_data_dict[i], inv_model_dict[j]
+
+            mask = np.logical_and(results["model"] == model, results["data"] == data)
+            subdf = results[mask]
+            if np.isnan(subdf[selection]).all():
+                true_j += 1
+                continue
+            lr_idx = np.nanargmax(subdf[selection])
+            row = subdf.iloc[lr_idx]
+
+            for pred_path_member in pred_path:
+                pred_path_loc = (
+                    pred_path_member
+                    / row["experiment"]
+                    / f"version_{row['version']}"
+                    / "test_task1.csv"
+                )
+                if pred_path_loc.is_file():
+                    break
+            if not pred_path_loc.is_file():
+                true_j += 1
+                continue
+
+            pred = pd.read_csv(pred_path_loc)
+            pred["trace_type_bin"] = pred["trace_type"] == "earthquake"
+
+            fpr, tpr, thr = roc_curve(pred["trace_type_bin"], pred["score_detection"])
+            auc = roc_auc_score(pred["trace_type_bin"], pred["score_detection"])
+            idx = np.argmin(
+                thr > row["det_threshold"]
+            )  # Index of optimal threshold in terms of F1 score
+
+            ax.text(
+                0.98,
+                0.02 + true_j * lineheight,
+                f"{MODEL_ABBREVIATIONS[model]} {auc:.3f}",
+                transform=ax.transAxes,
+                ha="right",
+                va="bottom",
+                color=f"C{true_j}",
+            )
+
+            ax.plot(fpr, tpr, label=model, color=f"C{true_j}")
+            ax.plot(fpr[idx], tpr[idx], "D", label=model, color=f"C{true_j}")
+
+            true_j += 1
+
+        ax.set_aspect("equal")
+        ax.set_title(DATA_ALIASES[data])
+
+        lim = ROC_LIMITS[data]
+        ax.set_xlim(-lim / 50, lim)
+        ax.set_ylim(1 - lim, 1 + lim / 50)
+        # ax.legend()
+        true_i += 1
+
+    for ax in axs[:, 0]:
+        ax.set_ylabel("true positive rate")
+    for ax in axs[-1]:
+        ax.set_xlabel("false positive rate")
+
+    return fig
 
 
 def results_to_array(results, cols, selection, minimize=False, axis=("data", "model")):
@@ -701,6 +834,11 @@ if __name__ == "__main__":
         action="store_true",
         help="If true, creates outputs for resampled experiments.",
     )
+    parser.add_argument(
+        "--roc",
+        action="store_true",
+        help="If true, creates roc plots for detection.",
+    )
 
     args = parser.parse_args()
-    main(args.base, args.cross, args.resampled)
+    main(args.base, args.cross, args.resampled, args.roc)
