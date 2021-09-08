@@ -234,7 +234,9 @@ def eval(source, target):
 
         split_targets["p_sample_pred"] = preds + split_targets["start_sample"]
 
-        pred_path = Path("pred_baer") / f"{eval_set}_task23.csv"
+        pred_path = (
+            Path("pred_baer") / f"{source}_baer_{target}" / f"{eval_set}_task23.csv"
+        )
         pred_path.parent.mkdir(exist_ok=True, parents=True)
         split_targets.to_csv(pred_path, index=False)
 
