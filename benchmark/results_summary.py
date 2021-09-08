@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpl
 import seaborn as sns
 from pathlib import Path
 import logging
 import argparse
-from collections import Counter
 from sklearn.metrics import roc_curve, roc_auc_score
 
 sns.set(font_scale=1.5)
@@ -15,6 +15,7 @@ sns.set_palette("colorblind")
 
 # Maps internal model names to model names in plots and tables
 MODEL_ALIASES = {
+    "baer": "Baer-Kradolfer",
     "basicphaseae": "BasicPhaseAE",
     "cred": "CRED",
     "dppdetect": "DPP",
@@ -68,8 +69,8 @@ ROC_LIMITS = {
 }
 
 
-def main(base, cross, resampled, roc):
-    if not (base or cross or resampled or roc):
+def main(base, cross, resampled, roc, roc_cross):
+    if not (base or cross or resampled or roc or roc_cross):
         logging.warning("No task selected. exiting.")
 
     if base:
@@ -81,6 +82,12 @@ def main(base, cross, resampled, roc):
         results = results[results["model"] != "gpd"]
         results_tables(results)
 
+        results_baer = pd.read_csv("results_baer.csv")
+        results_baer = results_baer[
+            results_baer["data"] == results_baer["target"]
+        ]  # Only consider in-domain results
+        results = results.append(results_baer)
+
         print("Generating plots")
         results_plots(results)
 
@@ -89,7 +96,7 @@ def main(base, cross, resampled, roc):
         results = results[results["model"] != "gpd"]
 
         print("Generating ROC")
-        fig = results_roc(results, "dev_det_f1")
+        fig = results_roc(results, "dev_det_auc")
         fig.savefig("results/detection_roc.eps", bbox_inches="tight")
 
     if cross:
@@ -98,9 +105,21 @@ def main(base, cross, resampled, roc):
         # Add "diagonal" entries
         results["target"] = results["data"]
         results_cross = results_cross.append(results)
+        results_baer = pd.read_csv("results_baer.csv")
+        results_cross = results_cross.append(results_baer)
 
-        for model in results["model"].unique():
+        for model in results_cross["model"].unique():
             model_results(results_cross, model)
+
+    if roc_cross:
+        results_cross = pd.read_csv("results_cross.csv")
+        results = pd.read_csv("results.csv")
+        # Add "diagonal" entries
+        results["target"] = results["data"]
+        results_cross = results_cross.append(results)
+
+        fig = results_roc_cross(results_cross, "dev_det_auc")
+        fig.savefig("results/detection_roc_cross.eps", bbox_inches="tight")
 
     if resampled:
         print("Generating resampled tables")
@@ -116,18 +135,18 @@ def main(base, cross, resampled, roc):
 def resampled_tables(results, suffix):
     table = results_to_table(
         results,
-        ["test_det_precision", "test_det_recall", "test_det_f1"],
-        "dev_det_f1",
-        ["P", "R", "F1"],
+        ["test_det_auc"],
+        "dev_det_auc",
+        ["AUC"],
     )
     with open(f"results/resampled/detection_test{suffix}.tex", "w") as f:
         f.write(table)
 
     table = results_to_table(
         results,
-        ["test_phase_precision", "test_phase_recall", "test_phase_f1"],
-        "dev_phase_f1",
-        ["P", "R", "F1"],
+        ["test_phase_mcc"],
+        "dev_phase_mcc",
+        ["MCC"],
     )
     with open(f"results/resampled/phase_test{suffix}.tex", "w") as f:
         f.write(table)
@@ -185,9 +204,9 @@ def model_results(results_cross, model):
 
     table = results_to_table(
         results_model[results_model["data"] != "lendb"],
-        ["test_phase_precision", "test_phase_recall", "test_phase_f1"],
-        "dev_phase_f1",
-        ["P", "R", "F1"],
+        ["test_phase_mcc"],
+        "dev_phase_mcc",
+        ["MCC"],
         axis=("data", "target"),
     )
     with open(f"results/cross/{model}_phase_test.tex", "w") as f:
@@ -220,7 +239,7 @@ def model_results(results_cross, model):
     fig = residual_matrix(
         "P",
         results_model[results_model["data"] != "lendb"],
-        [Path("pred"), Path("pred_cross")],
+        [Path("pred"), Path("pred_cross"), Path("pred_baer")],
         "dev_P_std_s",
         axis=("data", "target"),
         separation=(4, 4),
@@ -246,9 +265,9 @@ def results_tables(results, suffix=None):
 
     table = results_to_table(
         results,
-        ["test_det_precision", "test_det_recall", "test_det_f1"],
-        "dev_det_f1",
-        ["P", "R", "F1"],
+        ["test_det_auc"],
+        "dev_det_auc",
+        ["AUC"],
     )
     with open(f"results/detection_test{suffix}.tex", "w") as f:
         f.write(table)
@@ -260,6 +279,15 @@ def results_tables(results, suffix=None):
         ["P", "R", "F1"],
     )
     with open(f"results/phase_test{suffix}.tex", "w") as f:
+        f.write(table)
+
+    table = results_to_table(
+        results,
+        ["test_phase_mcc"],
+        "dev_phase_mcc",
+        ["MCC"],
+    )
+    with open(f"results/phase_test_mcc{suffix}.tex", "w") as f:
         f.write(table)
 
     table = results_to_table(
@@ -287,7 +315,11 @@ def results_tables(results, suffix=None):
 
 def results_plots(results):
     fig = residual_matrix(
-        "P", results, Path("pred"), "dev_P_std_s", separation=(4, None)
+        "P",
+        results,
+        [Path("pred"), Path("pred_baer")],
+        "dev_P_std_s",
+        separation=(4, None),
     )
     fig.savefig("results/test_P_diff.eps", bbox_inches="tight")
     plt.close(fig)
@@ -315,6 +347,153 @@ def detect_missing_entries(results):
                 mask = np.logical_and(mask, results["lr"] == lr)
                 if np.sum(mask) != 1:
                     print(np.sum(mask), data, model, lr)
+
+
+def results_roc_cross(results, selection):
+    results = results[
+        ~np.isnan(results["dev_det_f1"])
+    ]  # Filter out invalid model/data/target combinations
+    results = results[results["model"] != "gpd"]  # Remove original GPD variant
+    data_dict, target_dict, res_array = results_to_array(
+        results[results["model"] == "phasenet"],
+        ["test_det_f1"],
+        selection,
+        minimize=False,
+        axis=("data", "target"),
+    )
+    model_list = sorted(results["model"].unique())
+    pred_path = [Path("pred"), Path("pred_cross")]
+
+    res_array = res_array[:, :, 0]
+
+    n_data = len(data_dict)
+    n_target = len(target_dict)
+
+    inv_data_dict = {v: k for k, v in data_dict.items()}
+    inv_target_dict = {v: k for k, v in target_dict.items()}
+
+    true_n_data = np.sum((~np.isnan(res_array)).any(axis=1))
+    true_n_target = np.sum((~np.isnan(res_array)).any(axis=0))
+
+    if true_n_data == 0 or true_n_target == 0:
+        return plt.figure()
+
+    fig = plt.figure(figsize=(4 * true_n_target, 4 * true_n_data))
+    gs = fig.add_gridspec(1, 2, width_ratios=(true_n_target - 1, 1), wspace=0.1)
+    gs1 = gs[0].subgridspec(true_n_data, true_n_target - 1, hspace=0.05, wspace=0.05)
+    gs2 = gs[1].subgridspec(true_n_data, 1, hspace=0.05)
+    axs = np.empty((true_n_data, true_n_target), dtype=object)
+    for i in range(true_n_data):
+        for j in range(true_n_target):
+            if j < true_n_target - 1:
+                axs[i, j] = fig.add_subplot(gs1[i, j])
+            else:
+                axs[i, j] = fig.add_subplot(gs2[i])
+
+    lineheight = 0.08
+
+    true_i = 0
+    for i in range(n_data):
+        if np.isnan(res_array[i]).all():
+            continue
+
+        data = inv_data_dict[i]
+        axs[true_i, 0].set_ylabel(DATA_ALIASES[data] + "\ntrue positive rate")
+
+        true_j = 0
+        for j in range(n_target):
+            ax = axs[true_i, true_j]
+            ax.set_aspect("equal")
+            if np.isnan(res_array[:, j]).all():
+                continue
+            data, target = inv_data_dict[i], inv_target_dict[j]
+
+            if true_i == 0:
+                ax.set_title(DATA_ALIASES[target])
+
+            for model_idx, model in enumerate(model_list):
+                mask = np.logical_and(
+                    results["target"] == target, results["data"] == data
+                )
+                mask = np.logical_and(mask, results["model"] == model)
+                subdf = results[mask]
+                if np.isnan(subdf[selection]).all():
+                    continue
+                lr_idx = np.nanargmax(subdf[selection])
+                row = subdf.iloc[lr_idx]
+
+                for pred_path_member in pred_path:
+                    pred_path_loc = (
+                        pred_path_member
+                        / row["experiment"]
+                        / f"version_{row['version']}"
+                        / "test_task1.csv"
+                    )
+                    if pred_path_loc.is_file():
+                        break
+                if not pred_path_loc.is_file():
+                    continue
+
+                pred = pd.read_csv(pred_path_loc)
+                pred["trace_type_bin"] = pred["trace_type"] == "earthquake"
+
+                fpr, tpr, thr = roc_curve(
+                    pred["trace_type_bin"], pred["score_detection"]
+                )
+                auc = roc_auc_score(pred["trace_type_bin"], pred["score_detection"])
+                idx = np.argmin(
+                    thr > row["det_threshold"]
+                )  # Index of optimal threshold in terms of F1 score
+
+                ax.text(
+                    0.98,
+                    0.01 + model_idx * lineheight,
+                    f"{MODEL_ABBREVIATIONS[model]} {auc:.3f}",
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="bottom",
+                    color=f"C{model_idx}",
+                    zorder=102,
+                )
+
+                ax.plot(fpr, tpr, label=model, color=f"C{model_idx}")
+                ax.plot(fpr[idx], tpr[idx], "D", label=model, color=f"C{model_idx}")
+
+            lim = 0.5
+            if target == "geofon":
+                lim = 1.02
+            ax.set_xlim(-lim / 50, lim)
+            ax.set_ylim(1 - lim, 1 + lim / 50)
+
+            if true_j != 0 and true_j != true_n_target - 1:
+                ax.set_yticklabels([])
+            if true_i != true_n_data - 1:
+                ax.set_xticklabels([])
+
+            bg_text = mpl.Rectangle(
+                (lim / 2.3, 1 - lim + 0.02 * lim),
+                lim - lim / 2.3 - 0.02 * lim,
+                lim / 2,
+                zorder=101,
+                linewidth=0,
+                edgecolor=None,
+                facecolor="#eeeeee",
+            )
+            ax.add_patch(bg_text)
+
+            true_j += 1
+
+        true_i += 1
+
+    for ax in axs[-1]:
+        ax.set_xlabel("false positive rate")
+
+    mid_left_ax = axs[axs.shape[0] // 2, 0]
+    mid_left_ax.set_ylabel("Data\n" + mid_left_ax.get_ylabel())
+    mid_top_ax = axs[0, axs.shape[1] // 2]
+    mid_top_ax.set_title("Target\n" + mid_top_ax.get_title())
+
+    return fig
 
 
 def results_roc(results, selection, cols=2):
@@ -712,6 +891,12 @@ def residual_matrix(
                 )
                 if pred_path_loc.is_file():
                     break
+
+                # For Bear picker, needs line without version
+                pred_path_loc = pred_path_member / row["experiment"] / "test_task23.csv"
+                if pred_path_loc.is_file():
+                    break
+
             if not pred_path_loc.is_file():
                 true_j += 1
                 continue
@@ -724,8 +909,8 @@ def residual_matrix(
                 "sampling_rate"
             ]
 
-            axs[true_i, true_j].axvline(np.mean(diff), c="C1", lw=3)
-            axs[true_i, true_j].axvline(np.median(diff), c="C2", lw=3)
+            axs[true_i, true_j].axvline(np.mean(diff), c="C1", lw=3, linestyle="--")
+            axs[true_i, true_j].axvline(np.median(diff), c="C2", lw=3, linestyle="--")
 
             bins = np.linspace(-local_lim, local_lim, 50)
             axs[true_i, true_j].hist(diff, bins=bins)
@@ -837,8 +1022,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--roc",
         action="store_true",
-        help="If true, creates roc plots for detection.",
+        help="If true, creates roc plot for detection.",
+    )
+    parser.add_argument(
+        "--roc_cross",
+        action="store_true",
+        help="If true, creates roc cross plot for detection.",
     )
 
     args = parser.parse_args()
-    main(args.base, args.cross, args.resampled, args.roc)
+    main(args.base, args.cross, args.resampled, args.roc, args.roc_cross)
