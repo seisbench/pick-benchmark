@@ -118,6 +118,9 @@ def main(base, cross, resampled, roc, roc_cross):
         results["target"] = results["data"]
         results_cross = results_cross.append(results)
 
+        fig = results_auc_cross(results_cross, "dev_det_auc")
+        fig.savefig("results/detection_auc_cross.eps", bbox_inches="tight")
+
         fig = results_roc_cross(results_cross, "dev_det_auc")
         fig.savefig("results/detection_roc_cross.eps", bbox_inches="tight")
 
@@ -347,6 +350,105 @@ def detect_missing_entries(results):
                 mask = np.logical_and(mask, results["lr"] == lr)
                 if np.sum(mask) != 1:
                     print(np.sum(mask), data, model, lr)
+
+
+def results_auc_cross(results, selection):
+    results = results[
+        ~np.isnan(results["dev_det_f1"])
+    ]  # Filter out invalid model/data/target combinations
+    results = results[results["model"] != "gpd"]  # Remove original GPD variant
+    model_list = sorted(results["model"].unique())
+
+    model_res = {}
+    data_dict = None
+    target_dict = None
+    for model in model_list:
+        tmp_data_dict, tmp_target_dict, res_array = results_to_array(
+            results[results["model"] == "phasenet"],
+            ["test_det_auc"],
+            selection,
+            minimize=False,
+            axis=("data", "target"),
+        )
+        model_res[model] = res_array[:, :, 0]
+
+        # Ensure dicts are compatible
+        if data_dict is None:
+            data_dict = tmp_data_dict
+            target_dict = tmp_target_dict
+        assert data_dict == tmp_data_dict
+        assert target_dict == tmp_target_dict
+
+    n_data = len(data_dict)
+    n_target = len(target_dict)
+
+    inv_data_dict = {v: k for k, v in data_dict.items()}
+    inv_target_dict = {v: k for k, v in target_dict.items()}
+
+    res_array = model_res["phasenet"]  # Dummy for removing invalid datasets
+    true_n_data = np.sum((~np.isnan(res_array)).any(axis=1))
+    true_n_target = np.sum((~np.isnan(res_array)).any(axis=0))
+
+    if true_n_data == 0 or true_n_target == 0:
+        return plt.figure()
+
+    fig = plt.figure(figsize=(3 * true_n_target, 3 * true_n_data))
+    axs = fig.subplots(
+        true_n_data, true_n_target, gridspec_kw={"hspace": 0.075, "wspace": 0.075}
+    )
+
+    true_i = 0
+    for i in range(n_data):
+        if np.isnan(res_array[i]).all():
+            continue
+
+        data = inv_data_dict[i]
+        axs[true_i, 0].set_ylabel(DATA_ALIASES[data] + "\nAUC")
+
+        true_j = 0
+        for j in range(n_target):
+            ax = axs[true_i, true_j]
+            if np.isnan(res_array[:, j]).all():
+                continue
+            data, target = inv_data_dict[i], inv_target_dict[j]
+
+            if true_i == 0:
+                ax.set_title(DATA_ALIASES[target])
+
+            for model_idx, model in enumerate(model_list):
+                mask = np.logical_and(
+                    results["target"] == target, results["data"] == data
+                )
+                mask = np.logical_and(mask, results["model"] == model)
+                subdf = results[mask]
+                if np.isnan(subdf[selection]).all():
+                    continue
+                lr_idx = np.nanargmax(subdf[selection])
+                row = subdf.iloc[lr_idx]
+
+                ax.bar(model_idx, row["test_det_auc"])
+
+            ax.set_ylim(0.5, 1)
+
+            if true_j != 0:
+                ax.set_yticklabels([])
+            if true_i != true_n_data - 1:
+                ax.set_xticklabels([])
+
+            true_j += 1
+
+        true_i += 1
+
+    for ax in axs[-1]:
+        ax.set_xticks(np.arange(len(model_list)))
+        ax.set_xticklabels([MODEL_ALIASES[x] for x in model_list], rotation=90)
+
+    mid_left_ax = axs[axs.shape[0] // 2, 0]
+    mid_left_ax.set_ylabel("Data\n" + mid_left_ax.get_ylabel())
+    mid_top_ax = axs[0, axs.shape[1] // 2]
+    mid_top_ax.set_title("Target\n" + mid_top_ax.get_title())
+
+    return fig
 
 
 def results_roc_cross(results, selection):
