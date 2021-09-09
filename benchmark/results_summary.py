@@ -805,7 +805,7 @@ def residual_matrix(
     if true_n_data == 0 or true_n_model == 0:
         return plt.figure()
 
-    fig = plt.figure(figsize=(15, 15))
+    fig = plt.figure(figsize=(18, 18))
 
     def splits_from_sep(sep, true_n):
         if sep is None:
@@ -909,8 +909,20 @@ def residual_matrix(
                 "sampling_rate"
             ]
 
-            axs[true_i, true_j].axvline(np.mean(diff), c="C1", lw=3, linestyle="--")
-            axs[true_i, true_j].axvline(np.median(diff), c="C2", lw=3, linestyle="--")
+            if row["model"] == "baer":
+                # Diff without early predictions as they are most likely outliers
+                diff_reduced = diff[
+                    pred_phase["p_sample_pred"] - pred_phase["start_sample"] > 100
+                ]
+            else:
+                diff_reduced = diff
+
+            axs[true_i, true_j].axvline(
+                np.mean(diff_reduced), c="C1", lw=3, linestyle="--"
+            )
+            axs[true_i, true_j].axvline(
+                np.median(diff_reduced), c="C2", lw=3, linestyle="--"
+            )
 
             bins = np.linspace(-local_lim, local_lim, 50)
             axs[true_i, true_j].hist(diff, bins=bins)
@@ -923,8 +935,8 @@ def residual_matrix(
 
             outliers = np.abs(diff) > local_lim
             frac_outliers = np.sum(outliers) / len(diff)
-            mae = np.mean(np.abs(diff))
-            rmse = np.sqrt(np.mean(diff ** 2))
+            mae = np.mean(np.abs(diff_reduced))
+            rmse = np.sqrt(np.mean(diff_reduced ** 2))
 
             lineheight = 0.13
             axs[true_i, true_j].text(
@@ -951,30 +963,31 @@ def residual_matrix(
                 ha="right",
                 va="top",
             )
-            axs[true_i, true_j].text(
-                0.02,
-                0.98,
-                "OUT",
-                transform=axs[true_i, true_j].transAxes,
-                ha="left",
-                va="top",
-            )
-            axs[true_i, true_j].text(
-                0.02,
-                0.98 - lineheight,
-                "MAE",
-                transform=axs[true_i, true_j].transAxes,
-                ha="left",
-                va="top",
-            )
-            axs[true_i, true_j].text(
-                0.02,
-                0.98 - 2 * lineheight,
-                "RMSE",
-                transform=axs[true_i, true_j].transAxes,
-                ha="left",
-                va="top",
-            )
+            if true_j == 0:
+                axs[true_i, true_j].text(
+                    0.02,
+                    0.98,
+                    "OUT",
+                    transform=axs[true_i, true_j].transAxes,
+                    ha="left",
+                    va="top",
+                )
+                axs[true_i, true_j].text(
+                    0.02,
+                    0.98 - lineheight,
+                    "MAE",
+                    transform=axs[true_i, true_j].transAxes,
+                    ha="left",
+                    va="top",
+                )
+                axs[true_i, true_j].text(
+                    0.02,
+                    0.98 - 2 * lineheight,
+                    "RMSE",
+                    transform=axs[true_i, true_j].transAxes,
+                    ha="left",
+                    va="top",
+                )
 
             if data == "neic" and model == "eqtransformer":
                 axs[true_i, true_j].set_facecolor("#aaaaaa")
