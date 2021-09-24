@@ -4,9 +4,23 @@ from pathlib import Path
 from tqdm import tqdm
 import yaml
 import torch
+import json
+import copy
 
 import models
 from util import load_best_model
+from results_summary import DATA_ALIASES
+
+json_base = {
+    "docstring": "Model trained on DATASET for 100 epochs with a learning rate of LR.\n"
+    "Threshold selected for optimal F1 score on in-domain evaluation.\n"
+    "When using this model, please reference the SeisBench publications listed "
+    "at https://github.com/seisbench/seisbench\n\n"
+    "Jannes Münchmeyer, Jack Woollam (munchmej@gfz-potsdam.de, jack.woollam@kit.edu)",
+    "model_args": {
+        "component_order": "ZNE",
+    },
+}
 
 
 def main():
@@ -52,6 +66,25 @@ def get_optimal_model_idx(subdf):
     return np.nanargmax(means)
 
 
+def generate_metadata(row):
+    # TODO: Determine thresholds and enable passing thresholds to the model from json
+    meta = copy.deepcopy(json_base)
+    meta["docstring"] = meta["docstring"].replace("DATASET", DATA_ALIASES[row["data"]])
+    meta["docstring"] = meta["docstring"].replace("LR", str(row["lr"]))
+    if row["model"] in ["cred", "eqtransformer", "dpppickerp", "dpppickers"]:
+        pass
+    elif row["model"] in ["phasenet", "basicphaseae", "dppdetect"]:
+        meta["model_args"]["phases"] = "PSN"
+    elif row["model"] == "gpd":
+        meta["model_args"]["phases"] = "PSN"
+        meta["model_args"]["filter_args"] = ["highpass"]
+        meta["model_args"]["filter_kwargs"] = {"freq": 0.5}
+    else:
+        raise ValueError("Unknown model type")
+
+    return meta
+
+
 def export_model(row):
     output_base = Path("seisbench_models")
     weights = Path("weights") / row["experiment"]
@@ -66,9 +99,13 @@ def export_model(row):
     model = load_best_model(model_cls, weights, version.name)
 
     output_path = output_base / row["model"] / f"{row['data']}.pt"
+    json_path = output_base / row["model"] / f"{row['data']}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.model.state_dict(), output_path)
-    # TODO: Write json files
+
+    meta = generate_metadata(row)
+    with open(json_path, "w") as f:
+        json.dump(meta, f, indent=4)
 
 
 if __name__ == "__main__":
