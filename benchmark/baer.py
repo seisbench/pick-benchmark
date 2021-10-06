@@ -21,6 +21,7 @@ data_aliases = {
     "stead": "STEAD",
     "neic": "NEIC",
     "instance": "InstanceCounts",
+    "iquique": "Iquique",
     "lendb": "LenDB",
     "scedc": "SCEDC",
 }
