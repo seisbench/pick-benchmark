@@ -43,6 +43,7 @@ DATA_ALIASES = {
     "ethz": "ETHZ",
     "geofon": "GEOFON",
     "instance": "INSTANCE",
+    "iquique": "Iquique",
     "lendb": "LenDB",
     "neic": "NEIC",
     "scedc": "SCEDC",
@@ -53,6 +54,7 @@ DATA_CLASSES = {
     "ethz": "regional",
     "geofon": "tele",
     "instance": "regional",
+    "iquique": "regional",
     "lendb": "regional",
     "neic": "tele",
     "scedc": "regional",
@@ -63,6 +65,7 @@ ROC_LIMITS = {
     "ethz": 0.3,
     "geofon": 0.5,
     "instance": 0.3,
+    "iquique": 0.3,
     "lendb": 0.3,
     "scedc": 0.5,
     "stead": 0.1,
@@ -245,7 +248,7 @@ def model_results(results_cross, model):
         [Path("pred"), Path("pred_cross"), Path("pred_baer")],
         "dev_P_std_s",
         axis=("data", "target"),
-        separation=(4, 4),
+        separation=(5, 5),
     )
     fig.savefig(f"results/cross/{model}_test_P_diff.eps", bbox_inches="tight")
     plt.close(fig)
@@ -256,7 +259,7 @@ def model_results(results_cross, model):
         [Path("pred"), Path("pred_cross")],
         "dev_S_std_s",
         axis=("data", "target"),
-        separation=(4, 4),
+        separation=(5, 5),
     )
     fig.savefig(f"results/cross/{model}_test_S_diff.eps", bbox_inches="tight")
     plt.close(fig)
@@ -322,13 +325,13 @@ def results_plots(results):
         results,
         [Path("pred"), Path("pred_baer")],
         "dev_P_std_s",
-        separation=(4, None),
+        separation=(5, None),
     )
     fig.savefig("results/test_P_diff.eps", bbox_inches="tight")
     plt.close(fig)
 
     fig = residual_matrix(
-        "S", results, Path("pred"), "dev_S_std_s", separation=(4, None)
+        "S", results, Path("pred"), "dev_S_std_s", separation=(5, None)
     )
     fig.savefig("results/test_S_diff.eps", bbox_inches="tight")
     plt.close(fig)
