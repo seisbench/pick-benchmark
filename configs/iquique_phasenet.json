@@ -1,0 +1,12 @@
+{
+  "model": "PhaseNet",
+  "data": "Iquique",
+  "trainer_args": {
+    "gpus": 1,
+    "max_epochs": 100
+  },
+  "model_args": {
+    "sample_boundaries": [null, null],
+    "lr": 1e-3
+  }
+}
