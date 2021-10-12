@@ -13,13 +13,15 @@ from results_summary import DATA_ALIASES
 
 json_base = {
     "docstring": "Model trained on DATASET for 100 epochs with a learning rate of LR.\n"
-    "Threshold selected for optimal F1 score on in-domain evaluation.\n"
+    "Threshold selected for optimal F1 score on in-domain evaluation. "
+    "Depending on the target region, the thresholds might need to be adjusted.\n"
     "When using this model, please reference the SeisBench publications listed "
     "at https://github.com/seisbench/seisbench\n\n"
     "Jannes Münchmeyer, Jack Woollam (munchmej@gfz-potsdam.de, jack.woollam@kit.edu)",
     "model_args": {
         "component_order": "ZNE",
     },
+    "seisbench_requirement": "0.1.6",
 }
 
 
@@ -67,20 +69,54 @@ def get_optimal_model_idx(subdf):
 
 
 def generate_metadata(row):
-    # TODO: Determine thresholds and enable passing thresholds to the model from json
     meta = copy.deepcopy(json_base)
+    default_args = {}
     meta["docstring"] = meta["docstring"].replace("DATASET", DATA_ALIASES[row["data"]])
     meta["docstring"] = meta["docstring"].replace("LR", str(row["lr"]))
-    if row["model"] in ["cred", "eqtransformer", "dpppickerp", "dpppickers"]:
+    if row["model"] in ["cred", "eqtransformer"]:
+        det_threshold = row["det_threshold"]
+        if np.isnan(det_threshold):
+            det_threshold = (
+                0.3  # Roughly the average detection threshold across datasets
+            )
+        default_args["detection_threshold"] = det_threshold
+        if row["model"] == "eqtransformer":
+            # As the outputs are independent, and the empirical phase_thresholds are usually close to 1,
+            # we just suggest the detection threshold for each phase as well.
+            default_args["P_threshold"] = det_threshold
+            default_args["S_threshold"] = det_threshold
+
+    elif row["model"] in ["dpppickerp", "dpppickers"]:
         pass
+
     elif row["model"] in ["phasenet", "basicphaseae", "dppdetect"]:
         meta["model_args"]["phases"] = "PSN"
+        det_threshold = row["det_threshold"]
+        if np.isnan(det_threshold):
+            det_threshold = 0.4
+        phase_threshold = row["phase_threshold"]
+        if np.isnan(phase_threshold):
+            phase_threshold = 1
+        default_args["P_threshold"] = det_threshold * np.sqrt(phase_threshold)
+        default_args["S_threshold"] = det_threshold / np.sqrt(phase_threshold)
+
     elif row["model"] == "gpd":
         meta["model_args"]["phases"] = "PSN"
         meta["model_args"]["filter_args"] = ["highpass"]
         meta["model_args"]["filter_kwargs"] = {"freq": 0.5}
+        det_threshold = row["det_threshold"]
+        if np.isnan(det_threshold):
+            det_threshold = 0.8
+        phase_threshold = row["phase_threshold"]
+        if np.isnan(phase_threshold):
+            phase_threshold = 1
+        default_args["P_threshold"] = det_threshold * np.sqrt(phase_threshold)
+        default_args["S_threshold"] = det_threshold / np.sqrt(phase_threshold)
+
     else:
         raise ValueError("Unknown model type")
+
+    meta["default_args"] = default_args
 
     return meta
 
