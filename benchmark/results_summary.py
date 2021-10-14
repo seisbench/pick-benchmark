@@ -70,10 +70,22 @@ ROC_LIMITS = {
     "scedc": 0.5,
     "stead": 0.1,
 }
+MODEL_COLORS = {
+    "baer": "C6",
+    "basicphaseae": "C0",
+    "cred": "C1",
+    "dppdetect": "C2",
+    "dpppickerp": "C2",
+    "dpppickers": "C2",
+    "eqtransformer": "C3",
+    "gpd": "C7",
+    "gpdpick": "C4",
+    "phasenet": "C5",
+}
 
 
-def main(base, cross, resampled, roc, roc_cross):
-    if not (base or cross or resampled or roc or roc_cross):
+def main(base, cross, resampled, roc, roc_cross, phase_cross):
+    if not (base or cross or resampled or roc or roc_cross or phase_cross):
         logging.warning("No task selected. exiting.")
 
     if base:
@@ -126,6 +138,21 @@ def main(base, cross, resampled, roc, roc_cross):
 
         fig = results_roc_cross(results_cross, "dev_det_auc")
         fig.savefig("results/detection_roc_cross.eps", bbox_inches="tight")
+
+    if phase_cross:
+        results_cross = pd.read_csv("results_cross.csv")
+        results = pd.read_csv("results.csv")
+        # Add "diagonal" entries
+        results["target"] = results["data"]
+        results_cross = results_cross.append(results)
+
+        fig = results_phase_cross(results_cross, "S")
+        fig.savefig("results/S_diff_cross.eps", bbox_inches="tight")
+
+        results_baer = pd.read_csv("results_baer.csv")
+        results_cross = results_cross.append(results_baer)
+        fig = results_phase_cross(results_cross, "P")
+        fig.savefig("results/P_diff_cross.eps", bbox_inches="tight")
 
     if resampled:
         print("Generating resampled tables")
@@ -454,6 +481,188 @@ def results_auc_cross(results, selection):
     return fig
 
 
+def results_phase_cross(results, phase):
+    selection = f"dev_{phase}_std_s"
+    pred_path = [Path("pred"), Path("pred_cross")]
+    if phase == "P":
+        pred_path.append(Path("pred_baer"))
+
+    results = results[
+        ~np.isnan(results[selection])
+    ]  # Filter out invalid model/data/target combinations
+    results = results[results["model"] != "gpd"]  # Remove original GPD variant
+    # Remove incorrect DPP variants
+    results = results[results["model"] != "dppdetect"]
+    if phase == "S":
+        results = results[results["model"] != "dpppickerp"]
+    elif phase == "S":
+        results = results[results["model"] != "dpppickers"]
+    model_list = sorted(results["model"].unique())
+
+    # Dummy for removing invalid datasets
+    data_dict, target_dict, res_array = results_to_array(
+        results[results["model"] == "phasenet"],
+        ["test_P_mean_s"],
+        selection,
+        minimize=True,
+        axis=("data", "target"),
+    )
+    res_array = res_array[:, :, 0]
+
+    n_data = len(data_dict)
+    n_target = len(target_dict)
+
+    inv_data_dict = {v: k for k, v in data_dict.items()}
+    inv_target_dict = {v: k for k, v in target_dict.items()}
+
+    true_n_data = np.sum((~np.isnan(res_array)).any(axis=1))
+    true_n_target = np.sum((~np.isnan(res_array)).any(axis=0))
+
+    if true_n_data == 0 or true_n_target == 0:
+        return plt.figure()
+
+    fig = plt.figure(figsize=(3 * true_n_target, 3 * true_n_data))
+    # axs = fig.subplots(
+    #    true_n_data, true_n_target, gridspec_kw={"hspace": 0.075, "wspace": 0.075}
+    # )
+    gs = fig.add_gridspec(1, 2, width_ratios=(true_n_target - 2, 2), wspace=0.1)
+    gs1 = gs[0].subgridspec(true_n_data, true_n_target - 2, hspace=0.075, wspace=0.075)
+    gs2 = gs[1].subgridspec(true_n_data, 2, hspace=0.075, wspace=0.075)
+    axs = np.empty((true_n_data, true_n_target), dtype=object)
+    for i in range(true_n_data):
+        for j in range(true_n_target):
+            if j < true_n_target - 2:
+                axs[i, j] = fig.add_subplot(gs1[i, j])
+            else:
+                axs[i, j] = fig.add_subplot(gs2[i, j - true_n_target + 2])
+
+    true_i = 0
+    for i in range(n_data):
+        if np.isnan(res_array[i]).all():
+            continue
+
+        data = inv_data_dict[i]
+        axs[true_i, 0].set_ylabel(DATA_ALIASES[data] + "\n$t_{pred} - t_{true}~[s]$")
+
+        true_j = 0
+        for j in range(n_target):
+            ax = axs[true_i, true_j]
+            if np.isnan(res_array[:, j]).all():
+                continue
+            data, target = inv_data_dict[i], inv_target_dict[j]
+            print(data, target)
+
+            if true_i == 0:
+                ax.set_title(DATA_ALIASES[target])
+
+            for model_idx, model in enumerate(model_list):
+                mask = np.logical_and(
+                    results["target"] == target, results["data"] == data
+                )
+                mask = np.logical_and(mask, results["model"] == model)
+                subdf = results[mask]
+                if np.isnan(subdf[selection]).all():
+                    continue
+                lr_idx = np.nanargmin(subdf[selection])
+                row = subdf.iloc[lr_idx]
+
+                for pred_path_member in pred_path:
+                    pred_path_loc = (
+                        pred_path_member
+                        / row["experiment"]
+                        / f"version_{row['version']}"
+                        / "test_task23.csv"
+                    )
+                    if pred_path_loc.is_file():
+                        break
+
+                    # For Bear picker, needs line without version
+                    pred_path_loc = (
+                        pred_path_member / row["experiment"] / "test_task23.csv"
+                    )
+                    if pred_path_loc.is_file():
+                        break
+
+                if not pred_path_loc.is_file():
+                    continue
+
+                pred = pd.read_csv(pred_path_loc)
+                pred = pred[pred["phase_label"] == phase]
+
+                diff = (
+                    pred[f"{phase.lower()}_sample_pred"] - pred["phase_onset"]
+                ) / pred["sampling_rate"]
+                boxtop = np.quantile(diff, 0.75)
+                boxbot = np.quantile(diff, 0.25)
+                whisktop = np.quantile(diff, 0.9)
+                whiskbot = np.quantile(diff, 0.1)
+
+                def plot_whisk(b, t):
+                    ax.plot(
+                        [model_idx - 0.25, model_idx + 0.25],
+                        [b, b],
+                        "k-",
+                        solid_capstyle="butt",
+                    )
+                    ax.plot(
+                        [model_idx - 0.25, model_idx + 0.25],
+                        [t, t],
+                        "k-",
+                        solid_capstyle="butt",
+                    )
+                    ax.plot([model_idx, model_idx], [b, t], "k-", solid_capstyle="butt")
+
+                plot_whisk(whiskbot, whisktop)
+                ax.bar(
+                    model_idx,
+                    height=boxtop - boxbot,
+                    bottom=boxbot,
+                    color=MODEL_COLORS[model],
+                )
+                ax.plot(
+                    [model_idx - 0.4, model_idx + 0.4],
+                    [np.mean(diff), np.mean(diff)],
+                    linestyle=":",
+                    color="k",
+                    lw=3,
+                    solid_capstyle="butt",
+                )
+                ax.plot(
+                    [model_idx - 0.4, model_idx + 0.4],
+                    [np.median(diff), np.median(diff)],
+                    linestyle="-",
+                    color="k",
+                    lw=3,
+                    solid_capstyle="butt",
+                )
+
+            ax.set_xlim(-0.6, len(model_list) - 0.4)
+            if target in ["neic", "geofon"]:
+                ax.set_ylim(-0.75 * 3, 0.75 * 3)
+            else:
+                ax.set_ylim(-0.75, 0.75)
+
+            if true_j != 0 and true_j != true_n_target - 2:
+                ax.set_yticklabels([])
+            if true_i != true_n_data - 1:
+                ax.set_xticklabels([])
+
+            true_j += 1
+
+        true_i += 1
+
+    for ax in axs[-1]:
+        ax.set_xticks(np.arange(len(model_list)))
+        ax.set_xticklabels([MODEL_ALIASES[x] for x in model_list], rotation=90)
+
+    mid_left_ax = axs[axs.shape[0] // 2, 0]
+    mid_left_ax.set_ylabel("Data\n" + mid_left_ax.get_ylabel())
+    mid_top_ax = axs[0, axs.shape[1] // 2]
+    mid_top_ax.set_title("Target\n" + mid_top_ax.get_title())
+
+    return fig
+
+
 def results_roc_cross(results, selection):
     results = results[
         ~np.isnan(results["dev_det_f1"])
@@ -682,8 +891,8 @@ def results_roc(results, selection, cols=2):
                 color=f"C{true_j}",
             )
 
-            ax.plot(fpr, tpr, label=model, color=f"C{true_j}")
-            ax.plot(fpr[idx], tpr[idx], "D", label=model, color=f"C{true_j}")
+            ax.plot(fpr, tpr, label=model, color=f"C{true_j}", lw=3)
+            ax.plot(fpr[idx], tpr[idx], "D", label=model, color=f"C{true_j}", ms=10)
 
             true_j += 1
 
@@ -1026,7 +1235,7 @@ def residual_matrix(
                 np.mean(diff_reduced), c="C1", lw=3, linestyle="--"
             )
             axs[true_i, true_j].axvline(
-                np.median(diff_reduced), c="C2", lw=3, linestyle="--"
+                np.median(diff_reduced), c="C3", lw=3, linestyle="--"
             )
 
             bins = np.linspace(-local_lim, local_lim, 50)
@@ -1108,7 +1317,7 @@ def residual_matrix(
         true_i += 1
 
     for ax in axs[-1]:
-        ax.set_xlabel("$t_{pred} - t_{true}$")
+        ax.set_xlabel("$t_{pred} - t_{true}~[s]$")
 
     mid_left_ax = axs[axs.shape[0] // 2, 0]
     mid_left_ax.set_ylabel(ax0.capitalize() + "\n" + mid_left_ax.get_ylabel())
@@ -1147,6 +1356,18 @@ if __name__ == "__main__":
         action="store_true",
         help="If true, creates roc cross plot for detection.",
     )
+    parser.add_argument(
+        "--phase_cross",
+        action="store_true",
+        help="If true, creates phase cross plots.",
+    )
 
     args = parser.parse_args()
-    main(args.base, args.cross, args.resampled, args.roc, args.roc_cross)
+    main(
+        args.base,
+        args.cross,
+        args.resampled,
+        args.roc,
+        args.roc_cross,
+        args.phase_cross,
+    )
