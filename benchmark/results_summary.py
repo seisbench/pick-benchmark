@@ -84,8 +84,10 @@ MODEL_COLORS = {
 }
 
 
-def main(base, cross, resampled, roc, roc_cross, phase_cross):
-    if not (base or cross or resampled or roc or roc_cross or phase_cross):
+def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds):
+    if not (
+        base or cross or resampled or roc or roc_cross or phase_cross or thresholds
+    ):
         logging.warning("No task selected. exiting.")
 
     if base:
@@ -166,6 +168,27 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross):
         print("Generating resampled plots")
         resampled_plots(results[results["target"] == "geofon"], suffix="_geofon")
         resampled_plots(results[results["target"] == "neic"], suffix="_neic")
+
+    if thresholds:
+        results = pd.read_csv("results.csv")
+
+        table = results_to_table(
+            results,
+            ["det_threshold"],
+            "dev_det_auc",
+            ["Thr"],
+        )
+        with open(f"results/detection_thresholds.tex", "w") as f:
+            f.write(table)
+
+        table = results_to_table(
+            results,
+            ["phase_threshold"],
+            "dev_phase_mcc",
+            ["Thr"],
+        )
+        with open(f"results/phase_thresholds.tex", "w") as f:
+            f.write(table)
 
 
 def resampled_tables(results, suffix):
@@ -1368,6 +1391,11 @@ if __name__ == "__main__":
         action="store_true",
         help="If true, creates phase cross plots.",
     )
+    parser.add_argument(
+        "--thresholds",
+        action="store_true",
+        help="If true, creates thresholds tables.",
+    )
 
     args = parser.parse_args()
     main(
@@ -1377,4 +1405,5 @@ if __name__ == "__main__":
         args.roc,
         args.roc_cross,
         args.phase_cross,
+        args.thresholds,
     )
