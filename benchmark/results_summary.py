@@ -114,6 +114,9 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross):
         fig = results_roc(results, "dev_det_auc")
         fig.savefig("results/detection_roc.eps", bbox_inches="tight")
 
+        fig = results_roc(results, "dev_det_auc", full_axis=True)
+        fig.savefig("results/detection_roc_full.eps", bbox_inches="tight")
+
     if cross:
         results_cross = pd.read_csv("results_cross.csv")
         results = pd.read_csv("results.csv")  # Reload data to include gpd results
@@ -810,7 +813,7 @@ def results_roc_cross(results, selection):
     return fig
 
 
-def results_roc(results, selection, cols=2):
+def results_roc(results, selection, cols=2, full_axis=False):
     data_dict, model_dict, res_array = results_to_array(
         results,
         ["test_det_precision", "test_det_recall", "test_det_f1"],
@@ -900,8 +903,12 @@ def results_roc(results, selection, cols=2):
         ax.set_title(DATA_ALIASES[data])
 
         lim = ROC_LIMITS[data]
-        ax.set_xlim(-lim / 50, lim)
-        ax.set_ylim(1 - lim, 1 + lim / 50)
+        if full_axis:
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+        else:
+            ax.set_xlim(-lim / 50, lim)
+            ax.set_ylim(1 - lim, 1 + lim / 50)
         # ax.legend()
         true_i += 1
 
