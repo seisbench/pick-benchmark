@@ -1268,7 +1268,7 @@ def residual_matrix(
                 np.median(diff_reduced), c="C3", lw=3, linestyle="--"
             )
 
-            bins = np.linspace(-local_lim, local_lim, 50)
+            bins = np.linspace(-local_lim, local_lim, 45)
             axs[true_i, true_j].hist(diff, bins=bins)
 
             if ax1 == "model":
