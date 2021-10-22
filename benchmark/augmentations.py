@@ -1,3 +1,7 @@
+"""
+This file contains augmentations required for the models that are too specific to be merged into SeisBench.
+"""
+
 import numpy as np
 import copy
 

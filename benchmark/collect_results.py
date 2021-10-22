@@ -1,3 +1,7 @@
+"""
+This script collects results in a folder, calculates performance metrics and writes them to csv.
+"""
+
 import argparse
 from pathlib import Path
 import logging

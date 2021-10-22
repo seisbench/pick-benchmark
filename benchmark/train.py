@@ -1,3 +1,7 @@
+"""
+This script handles the training of models base on model configuration files.
+"""
+
 import seisbench.generate as sbg
 from seisbench.util import worker_seeding
 

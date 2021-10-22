@@ -1,3 +1,8 @@
+"""
+This script implements functionality for evaluating models.
+Given a model and a set of targets, it calculates and outputs predictions.
+"""
+
 import seisbench.generate as sbg
 
 import argparse

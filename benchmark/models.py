@@ -1,3 +1,7 @@
+"""
+This file contains the model specifications.
+"""
+
 import seisbench.models as sbm
 import seisbench.generate as sbg
 

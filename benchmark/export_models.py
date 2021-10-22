@@ -1,3 +1,8 @@
+"""
+This script is used to export models into the SeisBench format and folder structure.
+This allows used through "from_pretrained".
+"""
+
 import numpy as np
 import pandas as pd
 from pathlib import Path

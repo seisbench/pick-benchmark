@@ -1,3 +1,8 @@
+"""
+This script performs a list of checks on a folder of config files.
+Please see the command line argument description for details on the checks.
+"""
+
 import argparse
 from pathlib import Path
 import logging

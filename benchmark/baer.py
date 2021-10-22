@@ -1,3 +1,7 @@
+"""
+This file implements training and evaluation of a Baer-Kradolfer picker for P picks on SeisBench datasets.
+"""
+
 from pathlib import Path
 import pandas as pd
 import numpy as np

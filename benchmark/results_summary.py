@@ -1,3 +1,9 @@
+"""
+This file contains functionality to generate results tables and plots.
+Please note that this script is adapted specifically to the benchmark paper.
+Therefore, manual adjustments will be required when applying it in other scenarios.
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

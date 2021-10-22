@@ -1,6 +1,6 @@
-seisbench
+seisbench~=0.1.7
 pytorch-lightning~=1.3.4
-torch
-sklearn
+torch~=1.8.1
+sklearn~=0.24.2
 seaborn~=0.11.1
 bayesian-optimization~=1.2.0

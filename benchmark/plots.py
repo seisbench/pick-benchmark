@@ -1,3 +1,8 @@
+"""
+This file offers generic plotting functions.
+Please note that some plotting functions are also contained directly in results_summary.py.
+"""
+
 from pathlib import Path
 import pandas as pd
 import seisbench.generate as sbg

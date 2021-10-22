@@ -1,3 +1,7 @@
+"""
+This file contains functionality related to data.
+"""
+
 import seisbench.data as sbd
 
 
