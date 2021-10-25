@@ -122,6 +122,9 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds):
         fig = results_roc(results, "dev_det_auc")
         fig.savefig("results/detection_roc.eps", bbox_inches="tight")
 
+        fig = results_roc(results, "dev_det_auc", cols=3)
+        fig.savefig("results/detection_roc_transposed.eps", bbox_inches="tight")
+
         fig = results_roc(results, "dev_det_auc", full_axis=True)
         fig.savefig("results/detection_roc_full.eps", bbox_inches="tight")
 
