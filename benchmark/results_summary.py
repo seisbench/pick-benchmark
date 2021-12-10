@@ -13,6 +13,7 @@ from pathlib import Path
 import logging
 import argparse
 from sklearn.metrics import roc_curve, roc_auc_score
+import seisbench.data as sbd
 
 sns.set(font_scale=1.5)
 sns.set_style("ticks")
@@ -90,9 +91,16 @@ MODEL_COLORS = {
 }
 
 
-def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds):
+def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
     if not (
-        base or cross or resampled or roc or roc_cross or phase_cross or thresholds
+        base
+        or cross
+        or resampled
+        or roc
+        or roc_cross
+        or phase_cross
+        or thresholds
+        or snr
     ):
         logging.warning("No task selected. exiting.")
 
@@ -201,6 +209,19 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds):
         )
         with open(f"results/phase_thresholds.tex", "w") as f:
             f.write(table)
+
+    if snr:
+        results = pd.read_csv("results.csv")
+        results = results[results["model"] != "gpd"]
+
+        results_baer = pd.read_csv("results_baer.csv")
+        results_baer = results_baer[
+            results_baer["data"] == results_baer["target"]
+        ]  # Only consider in-domain results
+        results = results.append(results_baer)
+
+        fig = stead_snr(results, "dev_P_std_s")
+        fig.savefig("results/stead_snr.eps", bbox_inches="tight")
 
 
 def resampled_tables(results, suffix):
@@ -969,6 +990,65 @@ def results_roc(results, selection, cols=2, full_axis=False, double_axis=False):
     return fig
 
 
+def stead_snr(results, selection):
+    stead = sbd.STEAD()
+
+    results = results[results["data"] == "stead"]
+    results = results[
+        ~results["model"].isin(["cred", "gpd", "dppdetect", "dpppickers"])
+    ]
+
+    pred_path = [Path("pred"), Path("pred_baer")]
+
+    fig = plt.figure(figsize=(5 * 3, 5 * 2))
+    axs = fig.subplots(2, 3, sharex=True, sharey=True)
+
+    for i, model in enumerate(sorted(results["model"].unique())):
+        print(i, model)
+        ax = axs[i // 3, i % 3]
+
+        rows = results[results["model"] == model]
+        row = rows.iloc[np.argmin(rows[selection])]
+
+        for pred_path_member in pred_path:
+            pred_path_loc = (
+                pred_path_member
+                / row["experiment"]
+                / f"version_{row['version']}"
+                / "test_task23.csv"
+            )
+            if pred_path_loc.is_file():
+                break
+
+            # For Bear picker, needs line without version
+            pred_path_loc = pred_path_member / row["experiment"] / "test_task23.csv"
+            if pred_path_loc.is_file():
+                break
+
+        pred = pd.read_csv(pred_path_loc)
+
+        joined = pd.merge(pred, stead.metadata, on="trace_name", how="left")
+        joined = joined[joined["phase_label"] == "P"]
+
+        snr = joined["trace_snr_db"].values
+        snr = np.array([float(x[1:-1].split()[0]) for x in snr])
+        diff = (
+            (joined["p_sample_pred"] - joined["phase_onset"]) / joined["sampling_rate"]
+        ).values
+
+        ax.hexbin(snr, diff, bins="log", extent=(-20, 100, -8, 8))
+        ax.set_xlim(-15, 95)
+        ax.set_ylim(-7, 7)
+        ax.set_title(MODEL_ALIASES[model])
+
+    for ax in axs[:, 0]:
+        ax.set_ylabel("$t_{pred} - t_{true}~[s]$")
+    for ax in axs[-1, :]:
+        ax.set_xlabel("SNR [db]")
+
+    return fig
+
+
 def results_to_array(results, cols, selection, minimize=False, axis=("data", "model")):
     """
     Packs results into numpy array with axis data, model, cols.
@@ -1424,6 +1504,11 @@ if __name__ == "__main__":
         action="store_true",
         help="If true, creates thresholds tables.",
     )
+    parser.add_argument(
+        "--snr",
+        action="store_true",
+        help="If true, creates snr plot.",
+    )
 
     args = parser.parse_args()
     main(
@@ -1434,4 +1519,5 @@ if __name__ == "__main__":
         args.roc_cross,
         args.phase_cross,
         args.thresholds,
+        args.snr,
     )
