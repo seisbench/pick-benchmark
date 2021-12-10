@@ -122,6 +122,9 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds):
         fig = results_roc(results, "dev_det_auc")
         fig.savefig("results/detection_roc.eps", bbox_inches="tight")
 
+        fig = results_roc(results, "dev_det_auc", double_axis=True, cols=3)
+        fig.savefig("results/detection_roc_double.eps", bbox_inches="tight")
+
         fig = results_roc(results, "dev_det_auc", cols=3)
         fig.savefig("results/detection_roc_transposed.eps", bbox_inches="tight")
 
@@ -845,7 +848,7 @@ def results_roc_cross(results, selection):
     return fig
 
 
-def results_roc(results, selection, cols=2, full_axis=False):
+def results_roc(results, selection, cols=2, full_axis=False, double_axis=False):
     data_dict, model_dict, res_array = results_to_array(
         results,
         ["test_det_precision", "test_det_recall", "test_det_f1"],
@@ -870,17 +873,25 @@ def results_roc(results, selection, cols=2, full_axis=False):
     if true_n_data == 0 or true_n_model == 0:
         return plt.figure()
 
-    fig = plt.figure(figsize=(5 * cols, 5 * rows))
-    axs = fig.subplots(rows, cols)
-
+    panel_size = 5
     lineheight = 0.07
+    row_spacing = 1  # Use every row
+    if double_axis:
+        # cols = true_n_data
+        rows *= 2
+        row_spacing = 2  # Use every second row
+
+    fig = plt.figure(figsize=(panel_size * cols, panel_size * rows))
+    axs = fig.subplots(rows, cols)
 
     true_i = 0
     for i in range(n_data):
         if np.isnan(res_array[i]).all():
             continue
         true_j = 0
-        ax = axs[true_i // cols, true_i % cols]
+        tmp_ax = [axs[true_i // cols * row_spacing, true_i % cols]]
+        if double_axis:
+            tmp_ax.append(axs[true_i // cols * row_spacing + 1, true_i % cols])
         for j in range(n_model):
             if np.isnan(res_array[:, j]).all():
                 continue
@@ -916,7 +927,11 @@ def results_roc(results, selection, cols=2, full_axis=False):
                 thr > row["det_threshold"]
             )  # Index of optimal threshold in terms of F1 score
 
-            ax.text(
+            for ax in tmp_ax:
+                ax.plot(fpr, tpr, label=model, color=f"C{true_j}", lw=3)
+                ax.plot(fpr[idx], tpr[idx], "D", label=model, color=f"C{true_j}", ms=10)
+
+            tmp_ax[-1].text(
                 0.98,
                 0.02 + true_j * lineheight,
                 f"{MODEL_ABBREVIATIONS[model]} {auc:.3f}",
@@ -926,22 +941,24 @@ def results_roc(results, selection, cols=2, full_axis=False):
                 color=f"C{true_j}",
             )
 
-            ax.plot(fpr, tpr, label=model, color=f"C{true_j}", lw=3)
-            ax.plot(fpr[idx], tpr[idx], "D", label=model, color=f"C{true_j}", ms=10)
-
             true_j += 1
 
-        ax.set_aspect("equal")
-        ax.set_title(DATA_ALIASES[data])
+        for ax in tmp_ax:
+            ax.set_aspect("equal")
+        tmp_ax[0].set_title(DATA_ALIASES[data])
 
         lim = ROC_LIMITS[data]
+        tmp_ax[0].set_xlim(-lim / 50, lim)
+        tmp_ax[0].set_ylim(1 - lim, 1 + lim / 50)
+
         if full_axis:
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
-        else:
-            ax.set_xlim(-lim / 50, lim)
-            ax.set_ylim(1 - lim, 1 + lim / 50)
-        # ax.legend()
+            tmp_ax[0].set_xlim(0, 1)
+            tmp_ax[0].set_ylim(0, 1)
+
+        if double_axis:
+            tmp_ax[1].set_xlim(0, 1)
+            tmp_ax[1].set_ylim(0, 1)
+
         true_i += 1
 
     for ax in axs[:, 0]:
