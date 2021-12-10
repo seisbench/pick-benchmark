@@ -1232,8 +1232,10 @@ def residual_matrix(
         true_j = 0
         for j in range(n_model):
             local_lim = lim
+            n_bins = 61
             if true_i < sep0 and true_j < sep1 and adjust_scale:
                 local_lim = 0.45
+                n_bins = 46
                 axs[true_i, true_j].set_xticks([-0.3, 0, 0.3])
 
             if np.isnan(res_array[:, j]).all():
@@ -1294,7 +1296,7 @@ def residual_matrix(
                 np.median(diff_reduced), c="C3", lw=3, linestyle="--"
             )
 
-            bins = np.linspace(-local_lim, local_lim, 45)
+            bins = np.linspace(-local_lim, local_lim, n_bins) + 1e-5
             axs[true_i, true_j].hist(diff, bins=bins)
 
             if ax1 == "model":
