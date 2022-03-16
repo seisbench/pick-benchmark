@@ -99,6 +99,8 @@ Then you'll need to implement the following:
 
 Now you'll only have to write a config file and can start training and evaluating the model.
 
-# References
+# Reference publication
 
-A reference publication is under preparation. Please check back later.
+When using code from this repository for your work, please reference the following publication:
+
+[Which picker fits my data? A quantitative evaluation of deep learning based seismic pickers](https://doi.org/10.1029/2021JB023499)
