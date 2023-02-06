@@ -21,6 +21,8 @@ import logging
 import data
 import models
 from util import default_workers
+import time
+import datetime
 
 
 def train(config, experiment_name, test_run):
@@ -182,6 +184,8 @@ def generate_phase_mask(dataset, phases):
 
 
 if __name__ == "__main__":
+    code_start_time = time.perf_counter()
+
     torch.manual_seed(42)
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
@@ -201,3 +205,8 @@ if __name__ == "__main__":
     if args.test_run:
         experiment_name = experiment_name + "_test"
     train(config, experiment_name, test_run=args.test_run)
+
+    running_time = str(
+        datetime.timedelta(seconds=time.perf_counter() - code_start_time)
+    )
+    print(f"Running time: {running_time}")
