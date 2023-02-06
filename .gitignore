@@ -143,3 +143,6 @@ tb_logs/
 pred/
 lightning_logs/
 
+/my_configs/
+/targets/
+
