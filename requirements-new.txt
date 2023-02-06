@@ -1,8 +1,0 @@
-seisbench~=0.2.8
-pytorch-lightning~=1.9.0
-torch~=1.13.1
-scikit-learn~=1.2.1
-seaborn~=0.12.2
-bayesian-optimization~=1.4.2
-torchmetrics==0.11.1
-
