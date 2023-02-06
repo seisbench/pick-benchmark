@@ -7,7 +7,9 @@ from seisbench.util import worker_seeding
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
-from pytorch_lightning.callbacks import GPUStatsMonitor
+
+# from pytorch_lightning.callbacks import GPUStatsMonitor
+from pytorch_lightning.callbacks import DeviceStatsMonitor
 import argparse
 import json
 import numpy as np
@@ -60,12 +62,14 @@ def train(config, experiment_name, test_run):
         tb_logger.log_hyperparams(config)
         loggers += [tb_logger]
 
-    gpu_stats = GPUStatsMonitor()
+    # gpu_stats = GPUStatsMonitor()
+    device_stats = DeviceStatsMonitor()  # 2022-12-13, Yiyuan
 
     trainer = pl.Trainer(
         default_root_dir=default_root_dir,
         logger=loggers,
-        callbacks=[gpu_stats],
+        # callbacks=[gpu_stats],
+        callbacks=[device_stats],
         **config.get("trainer_args", {}),
     )
 
