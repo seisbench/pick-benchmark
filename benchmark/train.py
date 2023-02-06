@@ -8,8 +8,9 @@ from seisbench.util import worker_seeding
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 
-# from pytorch_lightning.callbacks import GPUStatsMonitor
-from pytorch_lightning.callbacks import DeviceStatsMonitor
+#
+from pytorch_lightning.callbacks import ModelCheckpoint
+import packaging
 import argparse
 import json
 import numpy as np
@@ -65,13 +66,28 @@ def train(config, experiment_name, test_run):
         loggers += [tb_logger]
 
     # gpu_stats = GPUStatsMonitor()
-    device_stats = DeviceStatsMonitor()  # 2022-12-13, Yiyuan
+
+    if packaging.version.parse(pl.__version__) < packaging.version.parse("1.7.0"):
+        from pytorch_lightning.callbacks import GPUStatsMonitor
+
+        gpu_stats = GPUStatsMonitor()
+        callbacks = [gpu_stats]
+    else:
+        # https://github.com/Lightning-AI/lightning/pull/12554
+        # https://github.com/Lightning-AI/lightning/issues/11796
+        # https://github.com/Lightning-AI/lightning/issues/9032
+        from pytorch_lightning.callbacks import DeviceStatsMonitor
+
+        device_stats = DeviceStatsMonitor()
+        checkpoint_callback = ModelCheckpoint(
+            save_top_k=1, filename="{epoch}-{step}", monitor="val_loss", mode="min"
+        )  # save_top_k=1, monitor="val_loss", mode="min": save the best model in terms of validation loss
+        callbacks = [device_stats, checkpoint_callback]
 
     trainer = pl.Trainer(
         default_root_dir=default_root_dir,
         logger=loggers,
-        # callbacks=[gpu_stats],
-        callbacks=[device_stats],
+        callbacks=callbacks,
         **config.get("trainer_args", {}),
     )
 

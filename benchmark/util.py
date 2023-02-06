@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 import os
 import logging
+import packaging
+import pytorch_lightning as pl
 
 
 def load_best_model(model_cls, weights, version):
@@ -22,18 +24,29 @@ def load_best_model(model_cls, weights, version):
     idx = np.nanargmin(metrics["val_loss"])
     min_row = metrics.iloc[idx]
 
-    checkpoint = f"epoch={min_row['epoch']:.0f}-step={min_row['step']:.0f}.ckpt"
+    if packaging.version.parse(pl.__version__) < packaging.version.parse("1.6.0"):
+        checkpoint = f"epoch={min_row['epoch']:.0f}-step={min_row['step']:.0f}.ckpt"
+    else:
+        #  For default checkpoint filename, see https://github.com/Lightning-AI/lightning/pull/11805
+        #  and https://github.com/Lightning-AI/lightning/issues/16636.
+        #  epoch starts from 0, step starts from 0
+        checkpoint = f"epoch={min_row['epoch']:.0f}-step={min_row['step']+1:.0f}.ckpt"
 
-    version_id = version.split("_")[-1]
-    version_str = f"{version_id}_{version_id}"
+    if packaging.version.parse(pl.__version__) < packaging.version.parse("1.7.0"):
+        version_id = version.split("_")[-1]
+        version_str = f"{version_id}_{version_id}"
 
-    checkpoint_path = (
-        weights.parent
-        / f"{weights.name}_{weights.name}"
-        / version_str
-        / "checkpoints"
-        / checkpoint
-    )
+        checkpoint_path = (
+            weights.parent
+            / f"{weights.name}_{weights.name}"
+            / version_str
+            / "checkpoints"
+            / checkpoint
+        )
+    else:
+        # For default save path of checkpoints, see https://github.com/Lightning-AI/lightning/pull/12372
+        # and https://lightning.ai/forums/t/how-to-get-the-checkpoint-path/327
+        checkpoint_path = weights / version / "checkpoints" / checkpoint
 
     return model_cls.load_from_checkpoint(checkpoint_path)
 
