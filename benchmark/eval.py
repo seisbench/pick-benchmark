@@ -18,6 +18,9 @@ import models
 import data
 import logging
 from util import load_best_model, default_workers
+import time
+import datetime
+import packaging
 
 data_aliases = {
     "ethz": "ETHZ",
@@ -125,8 +128,12 @@ def main(weights, targets, sets, batchsize, num_workers, sampling_rate=None):
             loader = DataLoader(
                 generator, batch_size=batchsize, shuffle=False, num_workers=num_workers
             )
-
-            trainer = pl.Trainer(gpus=1)
+            if packaging.version.parse(pl.__version__) < packaging.version.parse(
+                "1.7.0"
+            ):
+                trainer = pl.Trainer(gpus=1)
+            else:
+                trainer = pl.Trainer(accelerator="gpu", devices=1)
 
             predictions = trainer.predict(model, loader)
 
@@ -171,6 +178,7 @@ def _identify_instance_dataset_border(task_targets):
 
 
 if __name__ == "__main__":
+    code_start_time = time.perf_counter()
     parser = argparse.ArgumentParser(
         description="Evaluate a trained model using a set of targets."
     )
@@ -215,3 +223,7 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         sampling_rate=args.sampling_rate,
     )
+    running_time = str(
+        datetime.timedelta(seconds=time.perf_counter() - code_start_time)
+    )
+    print(f"Running time: {running_time}")
