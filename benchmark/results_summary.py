@@ -106,6 +106,7 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if base:
         results = pd.read_csv("results.csv")
+        results = results[results["model"] != "phasenetlight"]
 
         detect_missing_entries(results)
         print("Generating tables")
@@ -124,6 +125,7 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if roc:
         results = pd.read_csv("results.csv")
+        results = results[results["model"] != "phasenetlight"]
         results = results[results["model"] != "gpd"]
 
         print("Generating ROC")
@@ -141,7 +143,9 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if cross:
         results_cross = pd.read_csv("results_cross.csv")
+        results_cross = results_cross[results_cross["model"] != "phasenetlight"]
         results = pd.read_csv("results.csv")  # Reload data to include gpd results
+        results = results[results["model"] != "phasenetlight"]
         # Add "diagonal" entries
         results["target"] = results["data"]
         results_cross = results_cross.append(results)
@@ -153,7 +157,9 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if roc_cross:
         results_cross = pd.read_csv("results_cross.csv")
+        results_cross = results_cross[results_cross["model"] != "phasenetlight"]
         results = pd.read_csv("results.csv")
+        results = results[results["model"] != "phasenetlight"]
         # Add "diagonal" entries
         results["target"] = results["data"]
         results_cross = results_cross.append(results)
@@ -166,7 +172,9 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if phase_cross:
         results_cross = pd.read_csv("results_cross.csv")
+        results_cross = results_cross[results_cross["model"] != "phasenetlight"]
         results = pd.read_csv("results.csv")
+        results = results[results["model"] != "phasenetlight"]
         # Add "diagonal" entries
         results["target"] = results["data"]
         results_cross = results_cross.append(results)
@@ -182,6 +190,7 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
     if resampled:
         print("Generating resampled tables")
         results = pd.read_csv("results_resampled.csv")
+        results = results[results["model"] != "phasenetlight"]
         resampled_tables(results[results["target"] == "geofon"], suffix="_geofon")
         resampled_tables(results[results["target"] == "neic"], suffix="_neic")
 
@@ -191,6 +200,7 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if thresholds:
         results = pd.read_csv("results.csv")
+        results = results[results["model"] != "phasenetlight"]
 
         table = results_to_table(
             results,
@@ -212,6 +222,7 @@ def main(base, cross, resampled, roc, roc_cross, phase_cross, thresholds, snr):
 
     if snr:
         results = pd.read_csv("results.csv")
+        results = results[results["model"] != "phasenetlight"]
         results = results[results["model"] != "gpd"]
 
         results_baer = pd.read_csv("results_baer.csv")
@@ -1388,7 +1399,7 @@ def residual_matrix(
             outliers = np.abs(diff) > local_lim
             frac_outliers = np.sum(outliers) / len(diff)
             mae = np.mean(np.abs(diff_reduced))
-            rmse = np.sqrt(np.mean(diff_reduced ** 2))
+            rmse = np.sqrt(np.mean(diff_reduced**2))
 
             lineheight = 0.13
             axs[true_i, true_j].text(

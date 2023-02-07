@@ -26,7 +26,8 @@ json_base = {
     "model_args": {
         "component_order": "ZNE",
     },
-    "seisbench_requirement": "0.1.6",
+    "seisbench_requirement": "0.3.0",
+    "version": "1",
 }
 
 
@@ -139,8 +140,8 @@ def export_model(row):
     model_cls = models.__getattribute__(config["model"] + "Lit")
     model = load_best_model(model_cls, weights, version.name)
 
-    output_path = output_base / row["model"] / f"{row['data']}.pt"
-    json_path = output_base / row["model"] / f"{row['data']}.json"
+    output_path = output_base / row["model"] / f"{row['data']}.pt.v1"
+    json_path = output_base / row["model"] / f"{row['data']}.json.v1"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.model.state_dict(), output_path)
 
