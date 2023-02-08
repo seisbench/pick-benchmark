@@ -128,12 +128,7 @@ def main(weights, targets, sets, batchsize, num_workers, sampling_rate=None):
             loader = DataLoader(
                 generator, batch_size=batchsize, shuffle=False, num_workers=num_workers
             )
-            if packaging.version.parse(pl.__version__) < packaging.version.parse(
-                "1.7.0"
-            ):
-                trainer = pl.Trainer(gpus=1)
-            else:
-                trainer = pl.Trainer(accelerator="gpu", devices=1)
+            trainer = pl.Trainer(accelerator="gpu", devices=1)
 
             predictions = trainer.predict(model, loader)
 
