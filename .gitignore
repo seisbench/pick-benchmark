@@ -141,6 +141,7 @@ tb_logs/
 weights/
 tb_logs/
 pred/
+pred_cross/
 lightning_logs/
 
 /my_configs/
