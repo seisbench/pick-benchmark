@@ -67,11 +67,14 @@ def train(config, experiment_name, test_run):
         tb_logger.log_hyperparams(config)
         loggers += [tb_logger]
 
-    device_stats = DeviceStatsMonitor()
     checkpoint_callback = ModelCheckpoint(
         save_top_k=1, filename="{epoch}-{step}", monitor="val_loss", mode="min"
     )  # save_top_k=1, monitor="val_loss", mode="min": save the best model in terms of validation loss
-    callbacks = [device_stats, checkpoint_callback]
+    callbacks = [checkpoint_callback]
+
+    ## Uncomment the following 2 lines to enable
+    # device_stats = DeviceStatsMonitor()
+    # callbacks.append(device_stats)
 
     trainer = pl.Trainer(
         default_root_dir=default_root_dir,
