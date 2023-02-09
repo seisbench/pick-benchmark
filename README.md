@@ -1,5 +1,7 @@
 # A benchmark of seismic picking and detection algorithms
 
+*Note: This repository is not actively maintained. Nonetheless, there might be occasional updated. For the reference version used for the benchmark paper listed at the bottom, check this [tagged version](https://github.com/seisbench/pick-benchmark/releases/tag/jgr_revision).*
+
 This repository contains a benchmark of seismic picking and detection algorithms, with a particular focus on deep learning methods.
 The benchmark is built on top [SeisBench - A toolbox for machine learning in seismology](https://github.com/seisbench/seisbench) and [pytorch lightning](https://www.pytorchlightning.ai/).
 It is intended to be modular and easily extensible.
