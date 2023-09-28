@@ -25,6 +25,7 @@ json_base = {
     "Jannes Münchmeyer, Jack Woollam (munchmej@gfz-potsdam.de, jack.woollam@kit.edu)",
     "model_args": {
         "component_order": "ZNE",
+        "norm": "peak",
     },
     "seisbench_requirement": "0.3.0",
     "version": "1",
@@ -121,6 +122,9 @@ def generate_metadata(row):
 
     else:
         raise ValueError("Unknown model type")
+
+    if row["model"] == "phasenet":
+        default_args["blinding"] = [250, 250]
 
     meta["default_args"] = default_args
 
